@@ -6,11 +6,11 @@ Pseudon is a dynamic language intertranspiler: it can translate a subset of each
 
 This python to pseudon translator would add automatic support for
   * python to ruby
-  * python to coffeescript
+  * python to javascript
   * python to perl
   * python to any other pseudon-supported language
 
-[pseudon compiler](https://github.com/alehande42/pseudon)
+[pseudon compiler](https://github.com/alehander42/pseudon)
 
 ## supported subset
 
@@ -35,7 +35,7 @@ Often that code is(or can be) expressed in very similar way, with
 similar constructs and basic types and data structures. On that level
 a lot of dynamic languages are very similar and the only real difference
 is syntax and methods api. That's a feasible task for automatic translation
-and actually the existance of `pseydon` is to fullfill a need of another
+and actually the existance of `pseudon` is to fullfill a need of another
 existing project.
 
 You can almost think of it in a "~json-for-algorithms" way: we express
