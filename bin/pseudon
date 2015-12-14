@@ -4,6 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import pseudon
 
+
 def z():
     if len(sys.argv) == 1:
         print('pseudon <filename>')
@@ -13,7 +14,8 @@ def z():
     with open(filename, 'r') as f:
         source = f.read()
     clj = pseudon.translate(source)
-    with open(filename + '.clj', 'w') as f:
+    base = filename.rpartition('.')[2]
+    with open('%s.pseudon.yaml' % base, 'w') as f:
         f.write(clj)
 
 if __name__ == '__main__':
