@@ -7,14 +7,14 @@ import pseudon
 
 def z():
     if len(sys.argv) == 1:
-        print('pseudon <filename>')
+        print('pseudon-python <filename>')
         return
 
     filename = sys.argv[1]
     with open(filename, 'r') as f:
         source = f.read()
     clj = pseudon.translate(source)
-    base = filename.rpartition('.')[2]
+    base = filename.rpartition('.')[0]
     with open('%s.pseudon.yaml' % base, 'w') as f:
         f.write(clj)
 

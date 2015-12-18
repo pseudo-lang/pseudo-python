@@ -3,4 +3,4 @@ import pseudon.ast_translator
 
 
 def translate(source):
-    return pseudon.ast_translator(pseudon.parser.parse(source)).translate()
+    return pseudon.ast_translator.ASTTranslator(pseudon.parser.parse(source)).translate()
