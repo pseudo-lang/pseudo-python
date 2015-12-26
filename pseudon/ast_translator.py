@@ -8,6 +8,11 @@ BUILTIN_TYPES = {
     'str': 'String'
 }
 
+OPS = {
+    ast.Add: '+',
+    ast.Sub: '-'
+}
+
 
 class ASTTranslator:
 
@@ -36,11 +41,11 @@ class ASTTranslator:
         type = 'int' if isinstance(n, int) else 'float'
         return {'type': type, 'value': n}
 
-    def _translate_name(self, id):
+    def _translate_name(self, id, ctx):
         if id[0].isupper():
-            return {'type': 'typename', name: id}
+            return {'type': 'typename', 'name': id}
         else:
-            return {'type': 'local', name: id}
+            return {'type': 'local', 'name': id}
 
     def _translate_functiondef(self, name, args, body, decorator_list, returns):
         if decorator_list:
@@ -49,12 +54,20 @@ class ASTTranslator:
         args = args.args[1:] if self.in_class else args.args  # noclass methods
         arg_type_hints = [self._type_hint(arg.annotation) for arg in args]
         return {'type': type,
-                'args': [{'type': 'local', 'name': arg.arg} for arg in args],
+                'name': name,
+                'args': [{'type': 'local', 'name': arg.arg, 'type_hint': type_a} for arg, type_a in zip(args, arg_type_hints)],
                 'body': self._translate_node(body),
                 'type_hint': arg_type_hints + [self._type_hint(returns)]}
 
     def _translate_expr(self, value):
         return self._translate_node(value)
+
+    def _translate_return(self, value):
+        return {'type': 'return', 'value': self._translate_node(value)}
+
+    def _translate_binop(self, op, left, right):
+        return {'type': 'binary', 'left': self._translate_node(left),
+                'right': self._translate_node(right), 'op': OPS[op.__class__]}
 
     def _type_hint(self, type):
         if type is None:
