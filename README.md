@@ -1,6 +1,6 @@
-#pseudon-python
+#pseudo-python
 
-a python to pseudon translator
+a python to pseudo translator
 
 Pseudon is a dynamic language intertranspiler: it can translate a subset of each supported language to a any of the others.
 
