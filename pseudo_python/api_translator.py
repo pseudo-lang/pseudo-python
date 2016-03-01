@@ -10,7 +10,7 @@ class StandardCall(Standard):
     def expand(self, args):
         if not self.expander:
             q = builtin_type_check(self.namespace, self.function, None, args)
-            return {'type': 'standard_call', 'namespace': self.namespace, 'function': self.function, 'args': args, 'pseudon_type': q[-1]}
+            return {'type': 'standard_call', 'namespace': self.namespace, 'function': self.function, 'args': args, 'pseudo_type': q[-1]}
         else:
             return self.expander(self.namespace, self.function, args)
 
@@ -23,19 +23,19 @@ class StandardMethodCall(Standard):
     def expand(self, args):
         if not self.expander:
             q = builtin_type_check(self.type, self.message, args[0], args[1:])
-            return {'type': 'standard_method_call', 'receiver': args[0], 'message': self.message, 'args': args[1:], 'pseudon_type': q[-1]}
+            return {'type': 'standard_method_call', 'receiver': args[0], 'message': self.message, 'args': args[1:], 'pseudo_type': q[-1]}
         else:
             return self.expander(self.type, self.message, args)
 
 
 def len_expander(type, message, args):
-    receiver_type = args[0]['pseudon_type']
+    receiver_type = args[0]['pseudo_type']
     if isinstance(receiver_type, tuple):
         a = receiver_type[0]
     else:
         a = receiver_type
     q = builtin_type_check(a, message, args[0], args[1:])
-    return {'type': 'standard_method_call', 'receiver': args[0], 'message': message, 'args': [], 'pseudon_type': q[-1]}
+    return {'type': 'standard_method_call', 'receiver': args[0], 'message': message, 'args': [], 'pseudo_type': q[-1]}
     
 
 FUNCTION_API = {

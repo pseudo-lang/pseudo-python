@@ -15,11 +15,11 @@ def z():
     with open(filename, 'r') as f:
         source = f.read()
     try:
-        clj = yaml.dump(pseudo.translate(source))
+        clj = yaml.dump(pseudo_python.translate(source))
         base = filename.rpartition('.')[0]
         with open('%s.pseudo.yaml' % base, 'w') as f:
             f.write(clj)
-    except pseudo.errors.PseudoPythonNotTranslatableError as e:
+    except pseudo_python.errors.PseudoPythonNotTranslatableError as e:
         print(e)
 
 if __name__ == '__main__':

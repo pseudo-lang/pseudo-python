@@ -1,8 +1,0 @@
-code:
-- args:
-  - {name: e, type: local}
-  body:
-  - {type: int, value: 2}
-  type: function
-  type_hint: [Int, '@unknown']
-type: program

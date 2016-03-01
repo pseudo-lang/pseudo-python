@@ -1,4 +1,4 @@
-import ast 
+import ast
 import pseudo_python.env
 from pseudo_python.builtin_typed_api import TYPED_API, serialize_type
 from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError
@@ -37,30 +37,38 @@ class ASTTranslator:
     def translate(self):
         self.dependencies = []
         self.definitions = []
-        self.definition_index = {'functions': {}}
+        self._definition_index = {'functions': {}}
         self.constants = []
         self.main = []
+        self._hierarchy = {}
+        self._attr_index = {}
+        self._attrs = {}
+        self.type_env['functions'] = {}
         self._translate_top_level(self.tree)
         self._translate_pure_functions()
-        main = self._translate_main()
-        definitions = self._translate_definitions()
-        return {'type': 'module', 'dependencies': self.dependencies, 'definitions': definitions, 'main': main}
+        main = self._serialize_node(self._translate_main())
+        definitions = self._serialize_node(self._translate_definitions())
+
+        return {'type': 'module', 'dependencies': self.dependencies, 'constants': self.constants, 'definitions': definitions, 'main': main}
 
     def _translate_definitions(self):
         definitions = []
         for definition in self.definitions:
             if definition[0] == 'function':
-                if not isinstance(self.definition_index[definition[1]], dict):
+                if not isinstance(self._definition_index['functions'][definition[1]], dict):
                     raise PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s" % definition[1])
-                
-                definitions.append(self.definition_index[definition[1]])
+
+                definitions.append(self._definition_index['functions'][definition[1]])
             elif definition[0] == 'class':
-                c = {'type': 'class_definition', 'name': definition[1], 'base': definition[2], 'attrs': self.attrs[definition[1]], 'methods': [], 'constructor': None}
+                c = {'type': 'class_definition', 'name': definition[1], 'base': definition[2],
+                     'attrs': [self._attr_index[definition[1]][a]
+                               for a
+                               in self._attrs[definition[1]]], 'methods': [], 'constructor': None}
                 for method in definition[3]:
-                    m = self.definition_index[definition[1][method]]
+                    m = self._definition_index[definition[1][method]]
                     if not isinstance(m, dict):
                         raise PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s#%s" % (definition[1], method))
-                    
+
                     if method == '__init__':
                         c['constructor'] = m
                     else:
@@ -70,41 +78,60 @@ class ASTTranslator:
 
         return definitions
 
+    def _serialize_node(self, node):
+        if isinstance(node, dict):
+            pseudo_type = node.get('pseudo_type')
+            if pseudo_type:
+                node['pseudo_type'] = serialize_type(node['pseudo_type'])
+            for _, child in node.items():
+                self._serialize_node(child)
+        elif isinstance(node, list):
+            for l in node:
+                self._serialize_node(l)
+        return node
 
     def _translate_main(self):
+        self.current_class = None
+        self.function_name = 'global scope'
         return list(map(self._translate_node, self.main))
 
     def _translate_top_level(self, node):
         nodes = node.body
         self.current_constant = None
-        for z, n in enumerate(nodes): # placeholders and index 
+        for z, n in enumerate(nodes): # placeholders and index
                                       # for function/class defs to be filled by type inference later
             if isinstance(n, ast.FunctionDef):
                 self.definitions.append(('function', n.name))
-                self.definition_index['functions'][n.name] = n
-                self.type_env.top[n.name] = ([None] * len(n.args.args)) + [None]
+                self._definition_index['functions'][n.name] = n
+                self.type_env.top['functions'][n.name] = ([None] * len(n.args.args)) + [None]
+                self.type_env.top[n.name] = self.type_env.top['functions'][n.name]
             elif isinstance(n, ast.ClassDef):
                 self.assert_translatable(decorator_list=([], n.decorator_list))
-
+                self._hierarchy[n.name] = (None, set())
                 if n.bases:
-                    if len(n.bases) != 0 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self.definition_index:
+                    if len(n.bases) != 0 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
                         raise PseudoPythonNotTranslatableError('only single inheritance from an already defined class is supported class %s' % n.name)
-                        
+
                     base = n.bases[0].id
                     self.type_env.top[n.name] = self.type_env.to[base][:]
+                    self._hierarchy[n.name] = (base, set())
+                    self._hierarchy[base][1].add(n.name)
                 else:
                     base = None
 
                 self.definitions.append(('class', n.name, base, []))
-                
-                self.definition_index[n.name] = {}
+
+                self._definition_index[n.name] = {}
+                self._attr_index[n.name] = {}
+                self._attrs[n.name] = []
+
 
                 for y, m in enumerate(n.body):
                     if isinstance(m, ast.FunctionDef):
                         if not m.args.args or m.args.args[0].arg != 'self':
                             raise PseudoPythonNotTranslatableError('only methods with a self arguments are supported: %s#%s' % (n.name, m.name))
                         self.definitions[-1][2].append(m.name)
-                        self.definition_index[n.name][m.name] = m
+                        self._definition_index[n.name][m.name] = m
                         self.type_env.top[n.name][m.name] = ([None] * (len(m.args.args) - 1)) + [None]
                     else:
                         raise PseudoPythonNotTranslatableError('only methods are supported in classes: %s' % type(m).__name__)
@@ -115,14 +142,14 @@ class ASTTranslator:
                     raise PseudoPythonTypeCheckError('you make pseudo-python very pseudo-confused: please use only snake_case or SCREAMING_SNAKE_CASE for variables %s' % n.targets[0].id)
                 elif self.main:
                     raise PseudoPythonNotTranslatableError('%s: constants must be initialized before all other top level code' % n.targets[0].id)
-                elif n.targets[0].id in self.type_env.top:
+                elif self.type_env.top[n.targets[0].id]:
                     raise PseudoPythonNotTranslatableError("you can't override a constant in pseudo-python %s" % n.targets[0].id)
                 else:
                     self.current_constant = n.targets[0].id
                     init = self._translate_node(n.value)
                     self.constants.append({
                         'type': 'constant',
-                        'name': n.targets[0].id,
+                        'constant': n.targets[0].id,
                         'init': init,
                         'pseudo_type': init['pseudo_type']
                     })
@@ -164,23 +191,36 @@ class ASTTranslator:
 
     def _translate_name(self, id, ctx):
         if id[0].isupper():
-            return {'type': 'typename', 'name': id}
+            if id not in self.type_env.top.values:
+                raise PseudoPythonTypeCheckError('%s is not defined' % id)
+            id_type = self.type_env.top[id]
+            if isinstance(id_type, dict): # class
+                id_type = id
+            return {'type': 'typename', 'name': id, 'pseudo_type': id_type}
         else:
-            return {'type': 'local', 'name': id}
+            id_type = self.type_env[id]
+            if id_type is None:
+                raise PseudoPythonTypeCheckError('%s is not defined' % id)
 
-    def _translate_call(self, func, args, keywords, stararg, kwarg):
-        self.assert_translatable('call', keywords=([], keywords), stararg=(None, stararg), kwarg=(None, kwarg))
+            if isinstance(id_type, list):
+                id_type = tuple(['Function'] + id_type)
+
+            return {'type': 'local', 'name': id, 'pseudo_type': id_type}
+
+    def _translate_call(self, func, args, keywords, starargs, kwargs):
+        self.assert_translatable('call', keywords=([], keywords), starargs=(None, starargs), kwargs=(None, kwargs))
         arg_nodes = self._translate_node(args)
 
-        if isinstance(func_node, ast.Name) and func_node.id in BUILTIN_FUNCTIONS:
-            return self._translate_builtin_call('global', func.node.id, arg_nodes)
+        if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
+            return self._translate_builtin_call('global', func.id, arg_nodes)
 
         func_node = self._translate_node(func)
 
+        print(func_node)
         if func_node['type'] == 'attr':
             if func_node['object']['pseudo_type'] == 'library': # math.log
                 return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes)
-            elif self.in_class and isinstance(func.value, ast.Name) and func.value.id == 'self':
+            elif self.current_class and self.current_class != 'functions' and isinstance(func.value, ast.Name) and func.value.id == 'self':
                 node_type = 'this_method_call'
             elif self.general_type(func_node['object']['pseudo_type']) in PSEUDON_BUILTIN_TYPES: # [2].append
                 return self._translate_builtin_method_call(self.general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
@@ -210,21 +250,21 @@ class ASTTranslator:
             raise PseudoPythonTypeCheckError('constructor of %s didn\'t expect %d arguments' % (name, len(params)))
 
         if init:
-            self._translate_function(self.definition_index[name]['__init__'], name, {'pseudo_type': name}, '__init__', [p['pseudo_type'] for p in params])
+            self._translate_function(self._definition_index[name]['__init__'], name, {'pseudo_type': name}, '__init__', [p['pseudo_type'] for p in params])
             init[-1] = name
 
-        for label, m in self.definition_index[name].items():
+        for label, m in self._definition_index[name].items():
             if len(self.type_env.top[name][label]) == 1:
                 self._translate_function(m, name, {'pseudo_type': name}, label, [])
 
 
-    def _translate_real_method_call(node_type, z, receiver, message, params):
+    def _translate_real_method_call(self, node_type, z, receiver, message, params):
         c = self.type_env.top[z]
-        if message in c:
-            q = self.type_check(z, message, params)[-1]
+        param_types = [param['pseudo_type'] for param in params]
+        if message in c and len(c[message]) == 1 or len(c[message]) > 1 and c[message][0]:
+            q = self._type_check(z, message, param_types)[-1]
         else:
-            param_types = [param['pseudo_type'] for param in params]
-            self.definition_index[z][message] = self._translate_function(self.definition_index[z][message], z, receiver, message, param_types)
+            self._definition_index[z][message] = self._translate_function(self._definition_index[z][message], z, receiver, message, param_types)
             q = c[message][-1]
 
         if node_type == 'call':
@@ -264,31 +304,36 @@ class ASTTranslator:
                 'pseudo-python doesn\'t support %s%s with %d args' % (serialize_type(class_type), message, len(args)))
 
     def _translate_function(self, node, z, receiver, name, args):
-        self.assert_translatable('functiondef', 
-            vararg=([], node.arg.vararg), kwonlyargs=([], node.arg.kwonlyargs), 
-            kw_defaults=([], node.arg.kw_defaults), defaults=([], node.arg.defaults), 
+        self.assert_translatable('functiondef',
+            vararg=(None, node.args.vararg), kwonlyargs=([], node.args.kwonlyargs),
+            kw_defaults=([], node.args.kw_defaults), defaults=([], node.args.defaults),
             decorator_list=([], node.decorator_list))
 
         node_args = node.args.args if z == 'functions' else node.args.args[1:]
 
         if len(node.args.args) != len(args):
             raise PseudoPythonTypeCheckError('%s expecting %d args' % (node.name, len(node.args.args)))
-        
+
         # 0-arg functions are inferred only in the beginning
 
         if args and self.type_env.top[z][name][0]:
             raise PseudoPythonTypeCheckError("please move recursion in a next branch in %s" % node.name)
 
         env = {a.arg: type for a, type in zip(node_args, args)}
-        env['self'] = receiver['pseudo_type']
+        if receiver:
+            env['self'] = receiver['pseudo_type']
         self.type_env, old_type_env = self.type_env.top.child_env(env), self.type_env
         self.type_env.top[z][name][:-1] = args
 
         outer_current_class, self.current_class = self.current_class, z
-        outer_function_name, self.function_name = self.function_name, message
+        outer_function_name, self.function_name = self.function_name, name
 
-        children = list(map(self._generate_node, node.body))
-
+        children = []
+        self.is_last = False
+        for j, child in enumerate(node.body):
+            if j == len(node.body) - 1:
+                self.is_last = True
+            children.append(self._translate_node(child))
         self.function_name = outer_function_name
         self.current_class = outer_current_class
 
@@ -300,8 +345,8 @@ class ASTTranslator:
         elif name == '__init__':
             type = 'constructor'
         else:
-            type = 'function_definition' 
-             
+            type = 'function_definition'
+
         q = {
             'type':   type,
             'name':   name,
@@ -312,6 +357,8 @@ class ASTTranslator:
         }
         if z != 'functions':
             q['this'] = {'type': 'typename', 'name': z}
+            if name != '__init__':
+                q['is_public'] = name[0] != '_'
         return q
 
     def _translate_expr(self, value):
@@ -323,10 +370,10 @@ class ASTTranslator:
         if whiplash[-1] and whiplash[-1] != value_node['pseudo_type']:
             raise PseudoPythonTypeCheckError("didn't expect %s return type for %s" % (value_node['pseudo_type'], self.function_name))
         elif whiplash[-1] is None:
-            whiplash[-1] = value_node['type_env']
-        
+            whiplash[-1] = value_node['pseudo_type']
+
         return {
-            'type': 'explicit_return', 
+            'type': 'explicit_return' if not self.is_last else 'implicit_return',
             'value': value_node,
             'pseudo_type': value_node['pseudo_type']
         }
@@ -335,6 +382,87 @@ class ASTTranslator:
         return {'type': 'binary', 'left': self._translate_node(left),
                 'right': self._translate_node(right), 'op': OPS[op.__class__]}
 
+    def _translate_attribute(self, value, attr, ctx):
+        value_node = self._translate_node(value)
+        if not isinstance(value_node['pseudo_type'], str):
+            raise PseudoPythonTypeCheckError("you can't access attr of %s, only of normal objects or modules" % (serialize_type(value_node['pseudo_type'])))
+
+        if value_node['type'] == 'library':
+            return {
+                'type': 'library_function',
+                'library': value_node['name'],
+                'function': attr,
+                'pseudo_python': None
+            }
+
+        else:
+            attr_type = self._attrs.get(value_node['pseudo_type'])
+            if attr_type is None:
+                raise PseudoPythonTypeCheckError("pseudo-python can't infer the type of %s.%s" % (value_node['pseudo_type'], attr))
+
+            return {
+                'type': 'attr',
+                'object': value_node,
+                'attr': attr,
+                'pseudo_type': attr_type
+            }
+
+    def _translate_assign(self, targets, value):
+        value_node = self._translate_node(value)
+        if isinstance(targets[0], ast.Name):
+            name = targets[0].id
+            e = self.type_env[name]
+            if e:
+                a = self._compatible_types(e, value_node['pseudo_type'], "can't change the type of variable %s in " % (name, self.function_name))
+            else:
+                a = value_node['pseudo_type']
+            self.type_env[name] = a
+            return {
+                'type': 'local_assignment',
+                'local': name,
+                'value': value_node,
+                'pseudo_python': 'Void',
+                'value_type': value_node['pseudo_type']
+            }
+        elif isinstance(targets[0], ast.Attribute):
+            z = self._translate_node(targets[0].value)
+            if z['pseudo_type'] == 'library':
+                raise PseudoPythonTypeCheckError("pseudo-python can't redefine a module function %s" % z['name'] + ':' + targets[0].attr)
+
+            is_public = not isinstance(targets[0].value, ast.Name) or targets[0].value.id != 'self'
+
+            if targets[0].attr in self._attr_index[z['pseudo_type']]:
+                a = self._compatible_types(self._attr_index[z['pseudo_type']][targets[0].attr]['pseudo_type'],
+                                           value_node['pseudo_type'], "can't change attr type of " % z['pseudo_type'] + '.' + targets[0].attr)
+                self._attr_index[z['pseudo_type']][targets[0].attr]['pseudo_type'] = a
+                if is_public:
+                    self._attr_index[z['pseudo_type']][targets[0].attr]['is_public'] = True
+            else:
+                a = value_node['pseudo_type']
+                self._attr_index[z['pseudo_type']][targets[0].attr] = {
+                    'type': 'class_attr',
+                    'name':  targets[0].attr,
+                    'pseudo_type': a,
+                    'is_public': is_public
+                }
+                self._attrs[z['pseudo_type']].append(targets[0].attr)
+
+
+            return {
+                'type': 'attr_assignment',
+                'attr': {
+                    'type': 'attr',
+                    'object': z,
+                    'attr': targets[0].attr,
+                    'pseudo_type': a
+                 },
+                'value': value_node,
+                'pseudo_type': 'Void'
+            }
+            #return self._translate_builtin_call(z['name'], targets[0].attr, [value_node])
+
+
+
     def assert_translatable(self, node, **pairs):
         for label, (expected, actual) in pairs.items():
             if actual != expected:
@@ -342,5 +470,48 @@ class ASTTranslator:
 
     def _translate_pure_functions(self):
         for f in self.definitions:
+            print(self.type_env.values)
             if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 1:
-                self.definition_index['functions'][f[1]] = self._translate_function(self.definition_index['functions'][f[1]], 'functions', None, f[1], [])
+                self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
+
+    def _type_check(self, z, message, types):
+        g = self.type_env.top.values.get(z, {}).get(message)
+        if not g:
+            raise PseudoPythonTypeCheckError("%s is not defined" % message)
+
+        if len(g) - 1 != len(types):
+            raise PseudoPythonTypeCheckError("%s expected %d args" % (message, len(g)))
+
+        for j, (a, b) in enumerate(zip(g[:-1], types)):
+            general = self._compatible_types(b, a, "can't convert %s#%s %dth arg" % (z, message, j))
+
+        return g
+
+    def _compatible_types(self, from_, to, err):
+        if isinstance(from_, str):
+            if not isinstance(to, str):
+                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+
+            elif from_ == to:
+                return to
+
+            elif from_ in self._hierarchy:
+                if to not in self._hierarchy or from_ not in self._hierarchy[to][1]:
+                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+                return to
+
+            elif from_ == 'Int' and to == 'Float':
+                return 'Float'
+
+            else:
+                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+        else:
+            if not isinstance(to, tuple) or len(from_) != len(to) or from_[0] != to[0]:
+                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+
+            for f, t in zip(from_, to):
+                self._compatible_types(f, t, err)
+
+            return to
+
+

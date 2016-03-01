@@ -19,8 +19,10 @@ _ = ()
 def serialize_type(l):
     if isinstance(l, str):
         return l
-    else:
-        return '%s[%s]' % (l[0], '\n'.join(map(serialize_type, l[1])))
+    elif isinstance(l, list):
+        return 'Function[%s]' % ', '.join(map(serialize_type, l))
+    elif isinstance(l, tuple):
+        return '%s[%s]' % (l[0], ', '.join(map(serialize_type, l[1:])))
 
 def add(l, r):
     if l == 'Float' and r in ['Float', 'Int']  or r == 'Float' and l in ['Float', 'Int']:
