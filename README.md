@@ -6,7 +6,6 @@ Pseudon is a dynamic language intertranspiler: it can translate a subset of each
 
 This python to pseudon translator would add automatic support for
   * python to javascript
-  * python to java
   * python to c++
   * python to c#
   * python to go
@@ -29,6 +28,8 @@ pseudon supports a very clear and somehow limited subset of a language:
   * conditionals (if / else if / else)
   * standard math/logical operations
   * basic exception-based error handling
+  * standard io: print/input, file read/write, basic http requests
+  * error handling and custom exceptions (basic support for builtin exceptions)
 
 ## why
 
