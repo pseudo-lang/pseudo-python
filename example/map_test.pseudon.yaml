@@ -1,0 +1,24 @@
+type: program
+code: 
+  - type: idiom
+    value:
+      type: map
+      sequence:
+        type: local
+        name: seq
+      iter:
+        type: local
+        name: e
+      lambda:
+        type: lambda
+        args: 
+          - type: local
+            name: e
+        body:
+          - type: call
+            callee:
+              type: local
+              name: e
+            args:
+              - type: int
+                value: 42
