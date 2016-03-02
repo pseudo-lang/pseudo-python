@@ -18,6 +18,8 @@ PSEUDON_BUILTIN_TYPES = {v: k for k, v in BUILTIN_TYPES.items()}
 
 BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int'}
 
+ITERABLE_TYPES = {'String', 'List', 'Dictionary'}
+
 OPS = {
     ast.Add:  '+',
     ast.Sub:  '-',
@@ -235,7 +237,12 @@ class ASTTranslator:
             elif func_node['type'] == 'typename':
                 return self._translate_init(func_node['name'], arg_nodes)
             else:
+                if func_node['pseudo_type'] != 'Function':
+                    raise PseudoPythonTypeCheckError("trying to call value" % 
+                        (func_node['name'] if 'name' in func_node else func_node['type']) + ' ' + serialize_type(func_node['pseudo_type']))
+
                 z = func_node['pseudo_type'][-1]
+
                 return {'type': 'call', 'function': func_node, 'args': arg_nodes, 'pseudo_type': z}
 
     def _translate_init(self, name, params):
@@ -533,17 +540,159 @@ class ASTTranslator:
         return {'type': 'string', 'value': s, 'pseudo_type': 'String'}
 
     def _translate_listcomp(self, generators, elt):
-        j_nodes = self._translate_node(generators[0].iter)
         if isinstance(generators[0].target, ast.Name):
-            target_nodes = self._translate_iter(generators[0].target, j_nodes)
+            sketchup = self._translate_iter(generators[0].target, generators[0].iter)
         
-        self.type_env = self.type_env.child_env({a['name']: a['pseudo_type'] for a in target_nodes})
+        env = {}
+        if 'index' in sketchup:
+            env[sketchup['index']['name']] = sketchup['index']['pseudo_type']
+        if 'iterator' in sketchup:
+            env[sketchup['iterator']['name']] = sketchup['iterator']['pseudo_type']
+        if 'iterators' in sketchup:
+            env.update({a['name']: a['pseudo_type'] for a in sketchup['iteratros']})
+        self.type_env = self.type_env.child_env(env)
+        
         old_function_name, self.function_name = self.function_name, 'list comprehension'
-        print(ast.dump(elt))
-        return { 
-            generators
+        
+        sketchup['type'] = 'functional' + sketchup['type']
+        if not generators[0].ifs:
+            sketchup['function'] = 'map'
+        else:
+            test_node = self._translate_node(generators[0].ifs[0])
+            if test_node['pseudo_type'] != 'Boolean':
+                test_type = serialize_type(test_node['pseudo_type'])
+                raise PseudoPythonTypeCheckError('Expected a bool test in list comprehension: ' % test_type)
+
+            sketchup['type'] += '_filter_map'
+            sketchup['test'] = [test_node]
+            
+        elt_node = self._translate_node(elt)
+
+        self.function_name = old_function_name
+        sketchup['block'] = [elt_node]
+        sketchup['pseudo_type'] = ['List', elt_node['pseudo_type']]
+        return sketchup
+
+    def _translate_iter(self,target, k):
+        # fix short names when not 5 am
+        if isinstance(k, ast.Call) and isinstance(k.func, ast.Name):
+            if k.func.id == 'enumerate':
+                if len(k.args) != 1: or not isinstance(target, ast.Tuple) or len(target.elts) != 2:
+                    raise PseudoPythonTypeCheckError('enumerate expected one arg not %d and two indexes' % len(k.args))
+                return self._translate_enumerate(target.elts, k.args[0])
+            elif k.func.id == 'range':
+                if not isinstance(target, ast.Tuple) or len(target.elts) != 2:
+                    raise PseudoPythonTypeCheckError('range expected two indexes')
+                
+                if not k.args or len(k.args) > 3:
+                    raise PseudoPythonTypeCheckError('range expected 1 to 3 args not %d' % len(k.args))                        
+                return self._translate_range(target.elts, k.args)
+            elif k.func.id == 'zip':
+                if len(k.args) < 2 or not isinstance(target, ast.Tuple) or len(k.args) != len(target.elts):
+                    raise PseudoPythonTypeCheckError('zip expected 2 or more args and the same number of indexes not %d' % len(k.args))                    
+                return self._translate_zip(target.elts, k.args)
+
+        sequence_node = self._translate_node(k)
+        self._confirm_iterable(sequence_node['pseudo_type'])
+
+        if isinstance(target, ast.Tuple):
+            raise PseudoPythonNotTranslatableError("pseudo doesn't support tuples yet")
+
+        elif not isinstance(target, ast.Name):
+            raise PseudoPythonNotTranslatableError("pseudo doesn't support %s as an iterator" % sequence_node['type'])
+
+        return {
+            'type': ''
+            'sequence': sequence_node,
+            'iterator': {
+                'type':       'local',
+                'pseudo_type': self._element_type(sequence_node['pseudo_type']),
+                'name':        target.id
+            }
         }
-        pass
+
+
+    def _translate_enumerable(self, targets, sequence):
+        sequence_node = self._translate_node(sequence)
+        self._confirm_iterable(sequence_node['pseudo_type'])
+
+        if not isinstance(targets[0], ast.Name) or not isinstance(targets[1], ast.Name):
+            raise PseudoPythonTypeCheckError('expected a name for an index not %s' % type(targets[0]).__name__)
+
+        return {
+            'type': 'with_index',
+            'sequences': [sequence_node],
+            'index': {
+                'type': 'local',
+                'pseudo_type': 'Int',
+                'name': targets[0].id
+            }, 
+            'iterator': {
+                'type': 'local',
+                'pseudo_type': self._element_type(sequence_node['pseudo_type']),
+                'name': targets[1].id
+            }
+        }
+
+    def _translate_range(self, targets, range):
+        if len(range) == 1:
+            start, end, step = {'type': 'int', 'value': 0, 'pseudo_type': 'Int'}, self._translate_node(range[0]), {'type': 'int', 'value': 1, 'pseudo_type': 'Int'}
+        elif len(range) == 2;
+            start, end, step = self._translate_node(range[0]), self._translate_node(range[1]), {'type': 'int', 'value': 1, 'pseudo_type': 'Int'}
+        else:
+            start, end, step = tuple(map(self._translate_node, range[:3]))
+
+        for label, r in [('start', start), ('end', end), ('step', step)]:
+            if r['pseudo_type'] != 'Int':
+                raise PseudoPythonTypeCheckError('expected int for range %s index' % label)
+        
+        if not isinstance(targets[0], ast.Name):
+            raise PseudoPythonTypeCheckError('index is not a name %s' % type(targets[0]).__name__)
+
+        return {
+            'type': 'range',
+            'start': start,
+            'end': end,
+            'step': step,
+            'index': {
+                'type': 'local',
+                'pseudo_type': 'Int',
+                'name': targets[0].id
+            }
+        }
+
+    def _translate_zip(self, targets, sequences):
+        sequence_nodes = []
+        sketchup = {'type': 'in_zip', 'iterators': []}
+        for s, z in zip(sequences, targets):
+            sequence_nodes.append(self._translate_node(s))
+            self._confirm_iterable(sequence_nodes[-1]['pseudo_type'])
+            if not isinstance(z, ast.Name):
+                raise PseudoPythonTypeCheckError('index is not a name %s' % type(z).__name__)
+            sketchup['iterators'].append({
+                'type': 'local',
+                'pseudo_type': self._element_type(sequence_nodes[-1]['pseudo_type']),
+                'name': z.id
+            })
+
+        sketchup['sequences'] = sequence_nodes
+        return sketchup
+
+
+
+    def _confirm_iterable(self, sequence_type):
+        sequence_general_type = self._general_type(sequence_type)
+        if sequence_type not in ITERABLE_TYPES:    
+            raise PseudoPythonTypeCheckError('expected an iterable type, not %s' % serialize_type(sequence_type))
+
+    def _element_type(self, sequence_type):
+        if isinstance(sequence_type, list):
+            if sequence_type[0] == 'Dictionary':
+                return sequence_type[2]
+            elif sequence_type[0] == 'List':
+                return sequence_type[1]
+        elif sequence_type == 'String':
+            return 'String'
 
     def assert_translatable(self, node, **pairs):
         for label, (expected, actual) in pairs.items():
