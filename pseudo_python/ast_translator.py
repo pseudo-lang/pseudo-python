@@ -26,12 +26,24 @@ ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
 INDEXABLE_TYPES = {'String', 'List', 'Dictionary', 'Array', 'Tuple'}
 
 OPS = {
-    ast.Add:  '+',
-    ast.Sub:  '-',
-    ast.Div:  '/',
-    ast.Pow:  '**',
-    ast.Mult: '*'
+    '+':  'add',
+    '-':  'substract',
+    '/':  'divide',
+    '**': 'power',
+    'and': 'logical_and',
+    '*':  'repeat'
 }
+
+PSEUDO_OPS = {
+    ast.Add: '+',
+    ast.Sub: '-',
+    ast.Div: '/',
+    ast.Mult: '*',
+    ast.And: 'and',
+    ast.Or:  'or',
+    ast.Pow: '**'
+}
+
 
 
 class ASTTranslator:
@@ -408,8 +420,25 @@ class ASTTranslator:
         }
 
     def _translate_binop(self, op, left, right):
-        return {'type': 'binary', 'left': self._translate_node(left),
-                'right': self._translate_node(right), 'op': OPS[op.__class__]}
+        op = PSEUDO_OPS[type(op)]
+        left_node, right_node = self._translate_node(left), self._translate_node(right)
+        binop_type = TYPED_API['operators'][op](left_node['pseudo_type'], right_node['pseudo_type'])[-1]
+        if binop_type == 'Float' or binop_type == 'Int':
+            return {
+                'type': 'binary_op',
+                'op': op,
+                'left': left_node,
+                'right': right_node,
+                'pseudo_type': binop_type
+            }
+        else:
+            return {
+                'type': 'standard_method_call',
+                'receiver': left_node,
+                'message': OPS[op],
+                'args': [right_node],
+                'pseudo_type': binop_type
+            }
 
     def _translate_attribute(self, value, attr, ctx):
         value_node = self._translate_node(value)

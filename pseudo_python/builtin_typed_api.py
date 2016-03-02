@@ -71,7 +71,7 @@ def add(l, r):
         return [l, r, 'Int']
     elif l == 'String' and r == 'String':
         return [l, r, 'String']
-    elif isinstance(l, tuple) and l[0] == 'List' and l == r:
+    elif isinstance(l, list) and l[0] == 'List' and l == r:
         return [l, r, l]
     else:
         raise PseudoPythonTypeCheckError("wrong types for +: %s and %s" % (serialize_type(l), serialize_type(r)))
@@ -89,9 +89,9 @@ def mul(l, r):
         return [l, r, 'Float']
     elif l == 'Int' and r == 'Int':
         return [l, r, 'Int']
-    elif l == 'Int' and (isinstance(r, tuple) and r[0] == 'List' or r == 'String'): 
+    elif l == 'Int' and (isinstance(r, list) and r[0] == 'List' or r == 'String'): 
         return [l, r, r]
-    elif r == 'Int' and (isinstance(l, tuple) and l[0] == 'List' or l == 'String'):
+    elif r == 'Int' and (isinstance(l, list) and l[0] == 'List' or l == 'String'):
         return [l, r, l]
     else:
         raise PseudoPythonTypeCheckError("wrong types for *: %s and %s" % (serialize_type(l), serialize_type(r)))
