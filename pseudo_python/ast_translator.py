@@ -224,12 +224,12 @@ class ASTTranslator:
                 return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes)
             elif self.current_class and self.current_class != 'functions' and isinstance(func.value, ast.Name) and func.value.id == 'self':
                 node_type = 'this_method_call'
-            elif self.general_type(func_node['object']['pseudo_type']) in PSEUDON_BUILTIN_TYPES: # [2].append
-                return self._translate_builtin_method_call(self.general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
+            elif self._general_type(func_node['object']['pseudo_type']) in PSEUDON_BUILTIN_TYPES: # [2].append
+                return self._translate_builtin_method_call(self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
             else:
                 node_type = 'method_call'
 
-            return self._translate_real_method_call(node_type, self.general_type(func_node['object']['pseudo_type']), receiver, func_node['attr'], arg_nodes)
+            return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), receiver, func_node['attr'], arg_nodes)
 
         else:
             if func_node['type'] == 'local' and func_node['pseudo_type'][-1] is None:
@@ -237,10 +237,13 @@ class ASTTranslator:
             elif func_node['type'] == 'typename':
                 return self._translate_init(func_node['name'], arg_nodes)
             else:
-                if func_node['pseudo_type'] != 'Function':
+                if not isinstance(func_node['pseudo_type'], list) or func_node['pseudo_type'][0] != 'Function':
+                    # print(func_node['name'] if 'name' in func_node else func_node['type'])
+                    print(serialize_type(func_node['pseudo_type']))
                     raise PseudoPythonTypeCheckError("trying to call value" % 
-                        (func_node['name'] if 'name' in func_node else func_node['type']) + ' ' + serialize_type(func_node['pseudo_type']))
+                        ((func_node['name'] if 'name' in func_node else func_node['type']) + ' ' + serialize_type(func_node['pseudo_type'])))
 
+                self._real_type_check(func_node['pseudo_type'], [arg_node['pseudo_type'] for arg_node in arg_nodes], (func_node['name'] if 'name' in func_node else func_node['type']))
                 z = func_node['pseudo_type'][-1]
 
                 return {'type': 'call', 'function': func_node, 'args': arg_nodes, 'pseudo_type': z}
@@ -507,7 +510,7 @@ class ASTTranslator:
 
     def _translate_subscript(self, value, slice, ctx):
         value_node = self._translate_node(value)
-        value_general_type = self.general_type(value_node['pseudo_type'])
+        value_general_type = self._general_type(value_node['pseudo_type'])
         if value_general_type not in ['String', 'List', 'Dictionary']:
             raise PseudoPythonTypeCheckError('pseudo-python can use [] only on str, list or dict: %s' % value_node['pseudo_type'])
 
@@ -577,7 +580,7 @@ class ASTTranslator:
         # fix short names when not 5 am
         if isinstance(k, ast.Call) and isinstance(k.func, ast.Name):
             if k.func.id == 'enumerate':
-                if len(k.args) != 1: or not isinstance(target, ast.Tuple) or len(target.elts) != 2:
+                if len(k.args) != 1 or not isinstance(target, ast.Tuple) or len(target.elts) != 2:
                     raise PseudoPythonTypeCheckError('enumerate expected one arg not %d and two indexes' % len(k.args))
                 return self._translate_enumerate(target.elts, k.args[0])
             elif k.func.id == 'range':
@@ -602,7 +605,7 @@ class ASTTranslator:
             raise PseudoPythonNotTranslatableError("pseudo doesn't support %s as an iterator" % sequence_node['type'])
 
         return {
-            'type': ''
+            'type': '',
             'sequence': sequence_node,
             'iterator': {
                 'type':       'local',
@@ -637,7 +640,7 @@ class ASTTranslator:
     def _translate_range(self, targets, range):
         if len(range) == 1:
             start, end, step = {'type': 'int', 'value': 0, 'pseudo_type': 'Int'}, self._translate_node(range[0]), {'type': 'int', 'value': 1, 'pseudo_type': 'Int'}
-        elif len(range) == 2;
+        elif len(range) == 2:
             start, end, step = self._translate_node(range[0]), self._translate_node(range[1]), {'type': 'int', 'value': 1, 'pseudo_type': 'Int'}
         else:
             start, end, step = tuple(map(self._translate_node, range[:3]))
@@ -682,7 +685,7 @@ class ASTTranslator:
 
     def _confirm_iterable(self, sequence_type):
         sequence_general_type = self._general_type(sequence_type)
-        if sequence_type not in ITERABLE_TYPES:    
+        if sequence_general_type not in ITERABLE_TYPES:
             raise PseudoPythonTypeCheckError('expected an iterable type, not %s' % serialize_type(sequence_type))
 
     def _element_type(self, sequence_type):
@@ -710,43 +713,46 @@ class ASTTranslator:
         if not g:
             raise PseudoPythonTypeCheckError("%s is not defined" % message)
 
-        if len(g) - 1 != len(types):
-            raise PseudoPythonTypeCheckError("%s expected %d args" % (message, len(g)))
+        return self._real_type_check(g, types, '%s#%s' % (z, message))
 
-        for j, (a, b) in enumerate(zip(g[:-1], types)):
-            general = self._compatible_types(b, a, "can't convert %s#%s %dth arg" % (z, message, j))
+    def _real_type_check(self, g, types, name):
+        if len(g) - 2 != len(types):
+            raise PseudoPythonTypeCheckError("%s expected %d args" % (message, len(g) - 2))
+
+        for j, (a, b) in enumerate(zip(g[1:-1], types)):
+            general = self._compatible_types(b, a, "can't convert %s %dth arg" % (name, j))
 
         return g
 
     def _compatible_types(self, from_, to, err):
         if isinstance(from_, str):
             if not isinstance(to, str):
-                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
 
             elif from_ == to:
                 return to
 
             elif from_ in self._hierarchy:
                 if to not in self._hierarchy or from_ not in self._hierarchy[to][1]:
-                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
                 return to
 
             elif from_ == 'Int' and to == 'Float':
                 return 'Float'
 
             else:
-                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
         else:
-            if not isinstance(to, tuple) or len(from_) != len(to) or from_[0] != to[0]:
-                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (from_, to))
+            if not isinstance(to, list) or len(from_) != len(to) or from_[0] != to[0]:
+                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
 
-            for f, t in zip(from_, to):
+            for f, t in zip(from_[1:-1], to[1:-1]):                
                 self._compatible_types(f, t, err)
 
             return to
 
 
-    def general_type(self, t):
+    def _general_type(self, t):
         if isinstance(t, list):
             return t[0]
         else:

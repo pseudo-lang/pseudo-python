@@ -1,1 +1,3 @@
 PyYAML==3.11
+colorama
+termcolor

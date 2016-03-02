@@ -5,6 +5,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import pseudo_python
 import pseudo_python.errors
 import yaml
+from colorama import init
+from termcolor import colored
 
 def z():
     if len(sys.argv) == 1:
@@ -20,8 +22,8 @@ def z():
         base = filename.rpartition('.')[0]
         with open('%s.pseudo.yaml' % base, 'w') as f:
             f.write(clj)
-    except pseudo_python.errors.PseudoPythonNotTranslatableError as e:
-        print(e)
+    except pseudo_python.errors.PseudoError as e:
+        print(colored(e, 'red'))
 
 if __name__ == '__main__':
     z()

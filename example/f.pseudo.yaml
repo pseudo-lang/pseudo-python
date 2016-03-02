@@ -19,6 +19,31 @@ definitions:
   - Int
   return_type: Int
   type: function_definition
+- block:
+  - pseudo_type: [List, String]
+    type: implicit_return
+    value:
+      block:
+      - index: {pseudo_type: Int, type: int, value: 0}
+        pseudo_type: String
+        sequence: {name: b, pseudo_type: String, type: local}
+        type: index
+      function: map
+      iterator: {name: b, pseudo_type: String, type: local}
+      pseudo_type: [List, String]
+      sequence:
+        name: a
+        pseudo_type: [List, String]
+        type: local
+      type: functional
+  name: g
+  params: [a]
+  pseudo_type:
+  - Function
+  - [List, String]
+  - [List, String]
+  return_type: [List, String]
+  type: function_definition
 dependencies: []
 main:
 - args:
@@ -29,6 +54,25 @@ main:
     pseudo_type: [Dictionary, Int, Int]
     type: dictionary
   function: {name: f, type: local}
+  pseudo_type: Int
+  type: call
+- args:
+  - elements:
+    - {pseudo_type: String, type: string, value: Hello}
+    pseudo_type: [List, String]
+    type: list
+  function: {name: g, type: local}
+  pseudo_type: [List, String]
+  type: call
+- args:
+  - {pseudo_type: Int, type: int, value: 2}
+  function:
+    name: f
+    pseudo_type:
+    - Function
+    - [Dictionary, Int, Int]
+    - Int
+    type: local
   pseudo_type: Int
   type: call
 type: module
