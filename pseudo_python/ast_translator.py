@@ -544,20 +544,14 @@ class ASTTranslator:
 
     def _translate_listcomp(self, generators, elt):
         if isinstance(generators[0].target, ast.Name):
-            sketchup = self._translate_iter(generators[0].target, generators[0].iter)
+            sketchup, env = self._translate_iter(generators[0].target, generators[0].iter)
         
-        env = {}
-        if 'index' in sketchup:
-            env[sketchup['index']['name']] = sketchup['index']['pseudo_type']
-        if 'iterator' in sketchup:
-            env[sketchup['iterator']['name']] = sketchup['iterator']['pseudo_type']
-        if 'iterators' in sketchup:
-            env.update({a['name']: a['pseudo_type'] for a in sketchup['iteratros']})
         self.type_env = self.type_env.child_env(env)
         
         old_function_name, self.function_name = self.function_name, 'list comprehension'
         
-        sketchup['type'] = 'functional' + sketchup['type']
+        sketchup['type'] = 'standard_iterable_call' + sketchup['type']
+
         if not generators[0].ifs:
             sketchup['function'] = 'map'
         else:
@@ -566,7 +560,7 @@ class ASTTranslator:
                 test_type = serialize_type(test_node['pseudo_type'])
                 raise PseudoPythonTypeCheckError('Expected a bool test in list comprehension: ' % test_type)
 
-            sketchup['type'] += '_filter_map'
+            sketchup['function'] = 'filter_map'
             sketchup['test'] = [test_node]
             
         elt_node = self._translate_node(elt)
@@ -604,15 +598,19 @@ class ASTTranslator:
         elif not isinstance(target, ast.Name):
             raise PseudoPythonNotTranslatableError("pseudo doesn't support %s as an iterator" % sequence_node['type'])
 
+        target_pseudo_type = self._element_type(sequence_node['pseudo_type'])
         return {
             'type': '',
-            'sequence': sequence_node,
-            'iterator': {
-                'type':       'local',
-                'pseudo_type': self._element_type(sequence_node['pseudo_type']),
-                'name':        target.id
+            'sequences': {'type': 'for_sequence', 'sequence': sequence_node},
+            'iterators': {
+                'type': 'for_iterator',
+                'iterator': {
+                    'type':       'local',
+                    'pseudo_type': target_pseudo_type,
+                    'name':        target.id
+                }
             }
-        }
+        }, {target.id: target_pseudo_type}
 
 
     def _translate_enumerable(self, targets, sequence):
@@ -622,20 +620,30 @@ class ASTTranslator:
         if not isinstance(targets[0], ast.Name) or not isinstance(targets[1], ast.Name):
             raise PseudoPythonTypeCheckError('expected a name for an index not %s' % type(targets[0]).__name__)
 
+        if self._general_type(sequence_node['pseudo_type']) == 'Dictionary':
+            q = 'items'
+            k = 'key'
+            v = 'iterator'
+        else:
+            q = 'index'
+            k = 'index'
+            v = 'value'
+        iterator_type = self._element_type(sequence_node['pseudo_type'])
         return {
-            'type': 'with_index',
-            'sequences': [sequence_node],
-            'index': {
-                'type': 'local',
-                'pseudo_type': 'Int',
-                'name': targets[0].id
-            }, 
-            'iterator': {
-                'type': 'local',
-                'pseudo_type': self._element_type(sequence_node['pseudo_type']),
-                'name': targets[1].id
-            }
-        }
+            'type': '',
+            'sequences': {'type': 'for_sequence_with_' + q, 'sequence': sequence_node},
+            'iterators': {'type': 'for_iterator_with_' + q, 
+                k: {
+                    'type': 'local',
+                    'pseudo_type': 'Int',
+                    'name': targets[0].id
+                }, 
+                v: {
+                    'type': 'local',
+                    'pseudo_type': iterator_type,
+                    'name': targets[1].id
+                }}
+            }, {targets[0].id: 'Int', targets[1].id: iterator_type}
 
     def _translate_range(self, targets, range):
         if len(range) == 1:
@@ -653,7 +661,7 @@ class ASTTranslator:
             raise PseudoPythonTypeCheckError('index is not a name %s' % type(targets[0]).__name__)
 
         return {
-            'type': 'range',
+            'type': '_range',
             'start': start,
             'end': end,
             'step': step,
@@ -662,24 +670,27 @@ class ASTTranslator:
                 'pseudo_type': 'Int',
                 'name': targets[0].id
             }
-        }
+        }, {targets[0].id: 'Int'}
 
     def _translate_zip(self, targets, sequences):
         sequence_nodes = []
-        sketchup = {'type': 'in_zip', 'iterators': []}
+        sketchup = {'type': '', 'iterators': {'type': 'for_iterator_zip', 'iterators': []}}
+        env = {}
         for s, z in zip(sequences, targets):
             sequence_nodes.append(self._translate_node(s))
             self._confirm_iterable(sequence_nodes[-1]['pseudo_type'])
             if not isinstance(z, ast.Name):
                 raise PseudoPythonTypeCheckError('index is not a name %s' % type(z).__name__)
-            sketchup['iterators'].append({
+            z_type = self._element_type(sequence_nodes[-1]['pseudo_type'])
+            sketchup['iterators']['iterators'].append({
                 'type': 'local',
-                'pseudo_type': self._element_type(sequence_nodes[-1]['pseudo_type']),
+                'pseudo_type': z_type,
                 'name': z.id
             })
+            env[z.id] = z_type
 
-        sketchup['sequences'] = sequence_nodes
-        return sketchup
+        sketchup['sequences'] = {'type': 'for_sequence_zip', 'sequences': sequence_nodes}
+        return sketchup, env
 
 
 
@@ -757,3 +768,5 @@ class ASTTranslator:
             return t[0]
         else:
             return t
+
+

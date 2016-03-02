@@ -29,13 +29,17 @@ definitions:
         sequence: {name: b, pseudo_type: String, type: local}
         type: index
       function: map
-      iterator: {name: b, pseudo_type: String, type: local}
+      iterators:
+        iterator: {name: b, pseudo_type: String, type: local}
+        type: for_iterator
       pseudo_type: [List, String]
-      sequence:
-        name: a
-        pseudo_type: [List, String]
-        type: local
-      type: functional
+      sequences:
+        sequence:
+          name: a
+          pseudo_type: [List, String]
+          type: local
+        type: for_sequence
+      type: standard_iterable_call
   name: g
   params: [a]
   pseudo_type:
@@ -63,16 +67,5 @@ main:
     type: list
   function: {name: g, type: local}
   pseudo_type: [List, String]
-  type: call
-- args:
-  - {pseudo_type: Int, type: int, value: 2}
-  function:
-    name: f
-    pseudo_type:
-    - Function
-    - [Dictionary, Int, Int]
-    - Int
-    type: local
-  pseudo_type: Int
   type: call
 type: module
