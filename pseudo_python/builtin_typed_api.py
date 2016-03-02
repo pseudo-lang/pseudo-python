@@ -16,6 +16,47 @@ _ = ()
 # for different methods in the same type env to reference and update the same signature
 # that helps us with inherited methods: each one updates the type signature for the whole hierarchy
 
+def builtin_type_check(namespace, function, receiver, args):
+    print(function, namespace, receiver)
+    x = TYPED_API[namespace][function]
+    a = namespace + '#' + function if receiver else namespace + ':' + function
+    if namespace == 'List' or namespace == 'Set' or namespace == 'Array':
+        generics = {'@t': receiver['pseudo_type'][1]}
+    elif namespace == 'Dictionary':
+        generics = {'@k': receiver['pseudo_type'][1], '@v': receiver['pseudo_type'][2]}
+    else:
+        generics = {}
+    
+    s = []
+    if x[0][0] == '*':
+        e = x[0][1:]
+        for arg in args:
+            s.append(simplify(e, generics))
+            arg_check(s[-1], arg, a)
+    else:
+        if len(x) - 1 != len(args):   
+            raise PseudoPythonTypeCheckError("%s expects %d args not %d" % (a, len(x) - 1, args))
+        for e, arg in zip(x[:-1], args):
+            s.append(simplify(e, generics))
+            arg_check(s[-1], arg, a)
+    s.append(simplify(x[-1], generics))
+    return s
+
+def arg_check(expected_type, args, a):
+    if expected_type != args['pseudo_type'] and expected_type != 'Any':
+        raise PseudoPythonTypeCheckError('%s expected %s not %s' % (a, serialize_type(expected_type), serialize_type(args['pseudo_type'])))
+
+def simplify(kind, generics):
+    if not generics:
+        return kind
+    elif isinstance(kind, str):
+        if kind[0] == '@' and kind in generics:
+            return generics[kind]
+        else:
+            return kind
+    else:
+        return [simplify(child, generics) for child in kind]
+
 def serialize_type(l):
     if isinstance(l, str):
         return l
@@ -90,6 +131,37 @@ TYPED_API = {
         'pop':        ['@t'],
         'insert':     ['@t', 'Void'],
         'insert_at':  ['@t', 'Int', 'Void']
+    },
+
+    'Dictionary': {
+        'keys':       ['List', '@k'],
+        'values':     ['List', '@v']
+    },
+
+    'Set': {
+        '|':           [['Set', '@t'], ['Set', '@t']],
+        'add':         ['@t', 'Void'],
+        'remove':      ['@t', 'Void'],
+        'intersection': [['Set', '@t'], ['Set', '@t']]
+    },
+
+    'Array': {
+        'index':       ['@t', 'Int'],
+        'count':       ['@t', 'Int']
+    },
+
+    'Tuple': {
+
+    },
+
+    'Regexp': {
+        'match':        ['String', 'RegexpMatch'],
+        'find_all':     [['String']]
+    },
+
+    'RegexpMatch': {
+        'group':        ['Int', 'String'],
+        'length':       ['Int']
     }
     # 'List#pop':        [_, '@t'],
     # 'List#insert':     [_, 'Null'],

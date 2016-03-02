@@ -1,3 +1,5 @@
+from pseudo_python.builtin_typed_api import builtin_type_check
+
 class Standard:
     pass
 
@@ -27,6 +29,12 @@ class StandardMethodCall(Standard):
         else:
             return self.expander(self.type, self.message, args)
 
+class StandardRegex(Standard):
+    def expand(self, args):
+        if args[0]['type'] == 'String':
+            return {'type': 'regex', 'value': args[0]['value'], 'pseudo_type': 'Regexp'}
+        else:
+            return {'type': 'standard_call', 'namespace': 'regexp', 'function': 'compile', 'args': [args[0]], 'pseudo_type': 'Regexp'}
 
 def len_expander(type, message, args):
     receiver_type = args[0]['pseudo_type']
@@ -55,6 +63,12 @@ FUNCTION_API = {
         'sin':      StandardCall('math', 'sin'),
         'cos':      StandardCall('math', 'cos')
 
+    },
+
+    're': {
+        'match':    StandardMethodCall('Regexp', 'match'),
+        'sub':      StandardMethodCall('Regexp', 'replace'),
+        'compile':  StandardRegex()
     }
 }
 
@@ -74,6 +88,24 @@ METHOD_API = {
         'values':   StandardMethodCall('Dictionary', 'values'),
         '[]':       StandardMethodCall('Dictionary', 'getitem'),
         '[]=':      StandardMethodCall('Dictionary', 'setitem')
+    },
+
+    'Array': {
+    },
+
+    'Tuple': {
+    },
+
+    'Set': {
+        '|':       StandardMethodCall('Set', 'union')
+    },
+
+    'Regexp': {
+        'match':   StandardMethodCall('Regexp', 'match')
+    },
+
+    'RegexpMatch': {
+        'group':    StandardMethodCall('RegexpMatch', 'group')
     }
 }
 

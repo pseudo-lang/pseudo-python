@@ -11,14 +11,19 @@ BUILTIN_TYPES = {
     'str':      'String',
     'list':     'List',
     'dict':     'Dictionary',
-
+    'set':      'Set',
+    'tuple':    'Tuple',
+    'SRE_Pattern': 'Regexp',
+    'SRE_Match': 'RegexpMatch'
 }
 
 PSEUDON_BUILTIN_TYPES = {v: k for k, v in BUILTIN_TYPES.items()}
 
 BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int'}
 
-ITERABLE_TYPES = {'String', 'List', 'Dictionary'}
+ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
+
+INDEXABLE_TYPES = {'String', 'List', 'Dictionary', 'Array', 'Tuple'}
 
 OPS = {
     ast.Add:  '+',
@@ -45,6 +50,7 @@ class ASTTranslator:
         self._hierarchy = {}
         self._attr_index = {}
         self._attrs = {}
+        self._imports = set()
         self.type_env['functions'] = {}
         self._translate_top_level(self.tree)
         self._translate_pure_functions()
@@ -102,7 +108,13 @@ class ASTTranslator:
         self.current_constant = None
         for z, n in enumerate(nodes): # placeholders and index
                                       # for function/class defs to be filled by type inference later
-            if isinstance(n, ast.FunctionDef):
+            if isinstance(n, ast.Import):
+                if self.definitions or self.main:
+                    raise PseudoPythonNotTranslatableError('imports can be only on top: %s' % n.names[0].name)
+                self._imports.add(n.names[0].name)                    
+                self.type_env.top[n.names[0].name] = 'library'
+
+            elif isinstance(n, ast.FunctionDef):
                 self.definitions.append(('function', n.name))
                 self._definition_index['functions'][n.name] = n
                 self.type_env.top['functions'][n.name] = ['Function'] + ([None] * len(n.args.args)) + [None]
@@ -177,6 +189,7 @@ class ASTTranslator:
     def _translate_module(self, body):
         ordered = []
         main = []
+
         for c in body:
             if isinstance(c, (ast.FunctionDef, ast.ClassDef)):
                 ordered.append(c)
@@ -229,13 +242,15 @@ class ASTTranslator:
             else:
                 node_type = 'method_call'
 
-            return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), receiver, func_node['attr'], arg_nodes)
+            return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
 
         else:
             if func_node['type'] == 'local' and func_node['pseudo_type'][-1] is None:
                 return self._translate_real_method_call('call', 'functions', None, func_node['name'], arg_nodes)
             elif func_node['type'] == 'typename':
                 return self._translate_init(func_node['name'], arg_nodes)
+            elif func_node['type'] == 'library_function':
+                return self._translate_builtin_call(func_node['library'], func_node['function'], arg_nodes)
             else:
                 if not isinstance(func_node['pseudo_type'], list) or func_node['pseudo_type'][0] != 'Function':
                     # print(func_node['name'] if 'name' in func_node else func_node['type'])
@@ -286,11 +301,13 @@ class ASTTranslator:
         return result
 
     def _translate_builtin_call(self, namespace, function, args):
+        if namespace != 'global' and namespace not in self._imports:
+            raise PseudoPythonTypeCheckError('module %s not imported: impossible to use %s' % (namespace, function))
         api = FUNCTION_API.get(namespace, {}).get(function)
         if not api:
             raise PseudoPythonNotTranslatableError('pseudo doesn\'t support %s%s' % (namespace, function))
 
-        if isinstance(api, tuple):
+        if not isinstance(api, dict):
             return api.expand(args)
         else:
             for count,(a, b)  in api.items():
@@ -399,18 +416,22 @@ class ASTTranslator:
         if not isinstance(value_node['pseudo_type'], str):
             raise PseudoPythonTypeCheckError("you can't access attr of %s, only of normal objects or modules" % (serialize_type(value_node['pseudo_type'])))
 
-        if value_node['type'] == 'library':
+        if value_node['pseudo_type'] == 'library':
             return {
                 'type': 'library_function',
                 'library': value_node['name'],
                 'function': attr,
-                'pseudo_python': None
+                'pseudo_type': 'library'
             }
 
         else:
-            attr_type = self._attrs.get(value_node['pseudo_type'])
+            value_general_type = self._general_type(value_node['pseudo_type'])
+            attr_type = self._attrs.get(value_general_type)
             if attr_type is None:
-                raise PseudoPythonTypeCheckError("pseudo-python can't infer the type of %s.%s" % (value_node['pseudo_type'], attr))
+                if METHOD_API.get(value_general_type, {}).get(attr):
+                    attr_type = 'builtin_method'
+                else:
+                    raise PseudoPythonTypeCheckError("pseudo-python can't infer the type of %s.%s" % (value_node['pseudo_type'], attr))
 
             return {
                 'type': 'attr',
@@ -433,7 +454,7 @@ class ASTTranslator:
                 'type': 'local_assignment',
                 'local': name,
                 'value': value_node,
-                'pseudo_python': 'Void',
+                'pseudo_type': 'Void',
                 'value_type': value_node['pseudo_type']
             }
         elif isinstance(targets[0], ast.Attribute):
@@ -479,11 +500,7 @@ class ASTTranslator:
         if not elts:
             return {'type': 'list', 'elements': [], 'pseudo_type': ['List', None]}
 
-        element_nodes = [self._translate_node(elts[0])]
-        element_type = element_nodes[0]['pseudo_type']
-        for j in enumerate(elts[1:]):
-            element_nodes.append(self._translate_node(elts[j + 1]))
-            element_type = self._compatible_types(element_type, element_node[-1]['pseudo_type'], "can't use different types in a list")
+        element_nodes, element_type = self._translate_elements(elts, 'list')
 
         return {
             'type': 'list',
@@ -508,15 +525,51 @@ class ASTTranslator:
             'pairs': pairs
         }
 
+    def _translate_set(self, elts):
+        element_nodes, element_type = self._translate_elements(elts, 'set')
+
+        return {
+            'type': 'set',
+            'pseudo_type': ['Set', element_type],
+            'elements': element_nodes
+        }
+
+    def _translate_tuple(self, elts, ctx):
+        element_nodes, accidentaly_homogeneous, element_type = self._translate_elements(elts, 'tuple', homogeneous=False) 
+
+        return {
+            'type': 'tuple',
+            'pseudo_type': ['Array', element_type, len(elts)] if accidentaly_homogeneous else ['Tuple'] + element_type,
+            'elements': element_nodes
+        }
+
+    def _translate_elements(self, elements, kind, homogeneous=True):
+        element_nodes = [self._translate_node(elements[0])]
+        element_type = element_nodes[0]['pseudo_type']
+        if not homogeneous:
+            element_types = [element_type]
+        accidentaly_homogeneous = True
+        for j, element in enumerate(elements[1:]):
+            element_nodes.append(self._translate_node(element))
+            if homogeneous:
+                element_type = self._compatible_types(element_type, element_nodes[-1]['pseudo_type'], "can't use different types in a %s" % kind)
+            else:
+                element_types.append(element_nodes[-1]['pseudo_type'])
+                if accidentaly_homogeneous:
+                    element_type = self._compatible_types(element_type, element_nodes[-1]['pseudo_type'], '', silent=True)
+                    accidentaly_homogeneous = element_type is not False
+
+        return (element_nodes, element_type) if homogeneous else (element_nodes, accidentaly_homogeneous, element_type if accidentaly_homogeneous else element_types)
+
     def _translate_subscript(self, value, slice, ctx):
         value_node = self._translate_node(value)
         value_general_type = self._general_type(value_node['pseudo_type'])
-        if value_general_type not in ['String', 'List', 'Dictionary']:
-            raise PseudoPythonTypeCheckError('pseudo-python can use [] only on str, list or dict: %s' % value_node['pseudo_type'])
+        if value_general_type not in INDEXABLE_TYPES:
+            raise PseudoPythonTypeCheckError('pseudo-python can use [] only on String, List, Dictionary or Tuple : %s' % value_node['pseudo_type'])
 
         if isinstance(slice, ast.Index):
             z = self._translate_node(slice.value)
-            if value_general_type in ['String', 'List'] and z['pseudo_type'] != 'Int':
+            if value_general_type in ['String', 'List', 'Tuple'] and z['pseudo_type'] != 'Int':
                 raise PseudoPythonTypeCheckError('a non int index for %s %s' % (value_general_type, z['pseudo_type']))
 
             if value_general_type == 'Dictionary' and z['pseudo_type'] != value_node['pseudo_type'][1]:
@@ -524,8 +577,18 @@ class ASTTranslator:
 
             if value_general_type == 'String':
                 pseudo_type = 'String'
-            elif value_general_type == 'List':
+            elif value_general_type == 'List' or value_general_type == 'Array':
                 pseudo_type = value_node['pseudo_type'][1]
+            elif value_general_type == 'Tuple':
+                if z['type'] != 'int':
+                    raise PseudoPythonTypeCheckError('pseudo-python can support only literal int indexes of a heterogenous tuple ' +
+                                                     'because otherwise the index type is not predictable %s %s ' % (serialize_type(value_node['pseudo_type']), z['type']))
+
+                elif z['value'] > len(value_node['pseudo_type']) - 2:
+                    raise PseudoPythonTypeCheckError('%s has only %d elements' % serialize_type(value_node['pseudo_type']), len(value_node['pseudo_type']))
+
+                pseudo_type = value_node['pseudo_type'][z['value'] + 1]
+
             else:
                 pseudo_type = value_node['pseudo_type'][2]
 
@@ -541,7 +604,7 @@ class ASTTranslator:
 
     def _translate_str(self, s):
         return {'type': 'string', 'value': s, 'pseudo_type': 'String'}
-
+    
     def _translate_nameconstant(self, value):
         if value == True or value == False:
             return {'type': 'boolean', 'value': value, 'pseudo_type': 'Boolean'}
@@ -741,27 +804,38 @@ class ASTTranslator:
 
         return g
 
-    def _compatible_types(self, from_, to, err):
+    def _compatible_types(self, from_, to, err, silent=False):
         if isinstance(from_, str):
             if not isinstance(to, str):
-                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
+                if silent:
+                    return False
+                else:
+                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
 
             elif from_ == to:
                 return to
 
             elif from_ in self._hierarchy:
                 if to not in self._hierarchy or from_ not in self._hierarchy[to][1]:
-                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
+                    if silent:
+                        return False
+                    else:
+                        raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
                 return to
 
             elif from_ == 'Int' and to == 'Float':
                 return 'Float'
 
+            elif silent:
+                return False
             else:
                 raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
         else:
             if not isinstance(to, list) or len(from_) != len(to) or from_[0] != to[0]:
-                raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
+                if silent:
+                    return False
+                else:
+                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
 
             for f, t in zip(from_[1:-1], to[1:-1]):                
                 self._compatible_types(f, t, err)
