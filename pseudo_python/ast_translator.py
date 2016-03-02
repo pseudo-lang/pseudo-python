@@ -529,6 +529,20 @@ class ASTTranslator:
         else:
             z = self._translate_node(slice)
 
+    def _translate_str(self, s):
+        return {'type': 'string', 'value': s, 'pseudo_type': 'String'}
+
+    def _translate_listcomp(self, generators, elt):
+        j_nodes = self._translate_node(generators[0].iter)
+        if isinstance(generators[0].target, ast.Name):
+            target_nodes = self._translate_iter(generators[0].target, j_nodes)
+        
+        self.type_env = self.type_env.child_env({a['name']: a['pseudo_type'] for a in target_nodes})
+        old_function_name, self.function_name = self.function_name, 'list comprehension'
+        print(ast.dump(elt))
+        return { 
+            generators
+        }
         pass
 
     def assert_translatable(self, node, **pairs):
