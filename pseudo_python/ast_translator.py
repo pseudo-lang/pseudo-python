@@ -542,6 +542,12 @@ class ASTTranslator:
     def _translate_str(self, s):
         return {'type': 'string', 'value': s, 'pseudo_type': 'String'}
 
+    def _translate_nameconstant(self, value):
+        if value == True or value == False:
+            return {'type': 'boolean', 'value': value, 'pseudo_type': 'Boolean'}
+        elif value is None:
+            return {'type': 'null', 'pseudo_type': 'Void'}
+
     def _translate_listcomp(self, generators, elt):
         if isinstance(generators[0].target, ast.Name):
             sketchup, env = self._translate_iter(generators[0].target, generators[0].iter)
@@ -558,7 +564,7 @@ class ASTTranslator:
             test_node = self._translate_node(generators[0].ifs[0])
             if test_node['pseudo_type'] != 'Boolean':
                 test_type = serialize_type(test_node['pseudo_type'])
-                raise PseudoPythonTypeCheckError('Expected a bool test in list comprehension: ' % test_type)
+                raise PseudoPythonTypeCheckError('Expected a bool test in list comprehension: %s' % test_type)
 
             sketchup['function'] = 'filter_map'
             sketchup['test'] = [test_node]

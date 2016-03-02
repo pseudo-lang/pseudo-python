@@ -28,7 +28,7 @@ definitions:
         pseudo_type: String
         sequence: {name: b, pseudo_type: String, type: local}
         type: index
-      function: map
+      function: filter_map
       iterators:
         iterator: {name: b, pseudo_type: String, type: local}
         type: for_iterator
@@ -39,6 +39,8 @@ definitions:
           pseudo_type: [List, String]
           type: local
         type: for_sequence
+      test:
+      - {pseudo_type: Boolean, type: boolean, value: true}
       type: standard_iterable_call
   name: g
   params: [a]
