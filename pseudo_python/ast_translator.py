@@ -46,8 +46,8 @@ class ASTTranslator:
         self.type_env['functions'] = {}
         self._translate_top_level(self.tree)
         self._translate_pure_functions()
-        main = self._serialize_node(self._translate_main())
-        definitions = self._serialize_node(self._translate_definitions())
+        main = self._translate_main()
+        definitions = self._translate_definitions()
 
         return {'type': 'module', 'dependencies': self.dependencies, 'constants': self.constants, 'definitions': definitions, 'main': main}
 
@@ -59,11 +59,11 @@ class ASTTranslator:
                     raise PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s" % definition[1])
 
                 definitions.append(self._definition_index['functions'][definition[1]])
-            elif definition[0] == 'class':
+            elif definition[0] == 'class':  #inherited
                 c = {'type': 'class_definition', 'name': definition[1], 'base': definition[2],
-                     'attrs': [self._attr_index[definition[1]][a]
+                     'attrs': [self._attr_index[definition[1]][a][0]
                                for a
-                               in self._attrs[definition[1]]], 'methods': [], 'constructor': None}
+                               in self._attrs[definition[1]] if not self._attr_index[definition[1]][a][0]], 'methods': [], 'constructor': None}
                 for method in definition[3]:
                     m = self._definition_index[definition[1][method]]
                     if not isinstance(m, dict):
@@ -78,17 +78,17 @@ class ASTTranslator:
 
         return definitions
 
-    def _serialize_node(self, node):
-        if isinstance(node, dict):
-            pseudo_type = node.get('pseudo_type')
-            if pseudo_type:
-                node['pseudo_type'] = serialize_type(node['pseudo_type'])
-            for _, child in node.items():
-                self._serialize_node(child)
-        elif isinstance(node, list):
-            for l in node:
-                self._serialize_node(l)
-        return node
+    # def _serialize_node(self, node):
+    #     if isinstance(node, dict):
+    #         pseudo_type = node.get('pseudo_type')
+    #         if pseudo_type:
+    #             node['pseudo_type'] = serialize_type(node['pseudo_type'])
+    #         for _, child in node.items():
+    #             self._serialize_node(child)
+    #     elif isinstance(node, list):
+    #         for l in node:
+    #             self._serialize_node(l)
+    #     return node
 
     def _translate_main(self):
         self.current_class = None
@@ -103,7 +103,7 @@ class ASTTranslator:
             if isinstance(n, ast.FunctionDef):
                 self.definitions.append(('function', n.name))
                 self._definition_index['functions'][n.name] = n
-                self.type_env.top['functions'][n.name] = ([None] * len(n.args.args)) + [None]
+                self.type_env.top['functions'][n.name] = ['Function'] + ([None] * len(n.args.args)) + [None]
                 self.type_env.top[n.name] = self.type_env.top['functions'][n.name]
             elif isinstance(n, ast.ClassDef):
                 self.assert_translatable(decorator_list=([], n.decorator_list))
@@ -114,6 +114,7 @@ class ASTTranslator:
 
                     base = n.bases[0].id
                     self.type_env.top[n.name] = self.type_env.to[base][:]
+                    self._attr_index[n.name][l] = {l: [t[0], True] for l, t in self._attr_index[base].items()}
                     self._hierarchy[n.name] = (base, set())
                     self._hierarchy[base][1].add(n.name)
                 else:
@@ -122,7 +123,6 @@ class ASTTranslator:
                 self.definitions.append(('class', n.name, base, []))
 
                 self._definition_index[n.name] = {}
-                self._attr_index[n.name] = {}
                 self._attrs[n.name] = []
 
 
@@ -132,7 +132,7 @@ class ASTTranslator:
                             raise PseudoPythonNotTranslatableError('only methods with a self arguments are supported: %s#%s' % (n.name, m.name))
                         self.definitions[-1][2].append(m.name)
                         self._definition_index[n.name][m.name] = m
-                        self.type_env.top[n.name][m.name] = ([None] * (len(m.args.args) - 1)) + [None]
+                        self.type_env.top[n.name][m.name] = ['Function'] + ([None] * (len(m.args.args) - 1)) + [None]
                     else:
                         raise PseudoPythonNotTranslatableError('only methods are supported in classes: %s' % type(m).__name__)
             elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
@@ -202,8 +202,8 @@ class ASTTranslator:
             if id_type is None:
                 raise PseudoPythonTypeCheckError('%s is not defined' % id)
 
-            if isinstance(id_type, list):
-                id_type = tuple(['Function'] + id_type)
+            # if isinstance(id_type, list):
+            # id_type = tuple(['Function'] + id_type)
 
             return {'type': 'local', 'name': id, 'pseudo_type': id_type}
 
@@ -246,7 +246,7 @@ class ASTTranslator:
         if class_types is None:
             raise PseudoPythonTypeCheckError("%s doesnt't exist" % name)
         init = class_types.get('__init__')
-        if init is None and arg_nodes:
+        if init is None and params:
             raise PseudoPythonTypeCheckError('constructor of %s didn\'t expect %d arguments' % (name, len(params)))
 
         if init:
@@ -254,14 +254,14 @@ class ASTTranslator:
             init[-1] = name
 
         for label, m in self._definition_index[name].items():
-            if len(self.type_env.top[name][label]) == 1:
+            if len(self.type_env.top[name][label]) == 2:
                 self._translate_function(m, name, {'pseudo_type': name}, label, [])
 
 
     def _translate_real_method_call(self, node_type, z, receiver, message, params):
         c = self.type_env.top[z]
         param_types = [param['pseudo_type'] for param in params]
-        if message in c and len(c[message]) == 1 or len(c[message]) > 1 and c[message][0]:
+        if message in c and len(c[message]) == 2 or len(c[message]) > 2 and c[message][1]:
             q = self._type_check(z, message, param_types)[-1]
         else:
             self._definition_index[z][message] = self._translate_function(self._definition_index[z][message], z, receiver, message, param_types)
@@ -316,14 +316,14 @@ class ASTTranslator:
 
         # 0-arg functions are inferred only in the beginning
 
-        if args and self.type_env.top[z][name][0]:
+        if args and self.type_env.top[z][name][1]:
             raise PseudoPythonTypeCheckError("please move recursion in a next branch in %s" % node.name)
 
         env = {a.arg: type for a, type in zip(node_args, args)}
         if receiver:
             env['self'] = receiver['pseudo_type']
         self.type_env, old_type_env = self.type_env.top.child_env(env), self.type_env
-        self.type_env.top[z][name][:-1] = args
+        self.type_env.top[z][name][1:-1] = args
 
         outer_current_class, self.current_class = self.current_class, z
         outer_function_name, self.function_name = self.function_name, name
@@ -334,6 +334,8 @@ class ASTTranslator:
             if j == len(node.body) - 1:
                 self.is_last = True
             children.append(self._translate_node(child))
+            print(self.type_env.values)
+            print(args);input()
         self.function_name = outer_function_name
         self.current_class = outer_current_class
 
@@ -432,19 +434,20 @@ class ASTTranslator:
             is_public = not isinstance(targets[0].value, ast.Name) or targets[0].value.id != 'self'
 
             if targets[0].attr in self._attr_index[z['pseudo_type']]:
-                a = self._compatible_types(self._attr_index[z['pseudo_type']][targets[0].attr]['pseudo_type'],
+                a = self._compatible_types(self._attr_index[z['pseudo_type']][targets[0].attr][0]['pseudo_type'],
                                            value_node['pseudo_type'], "can't change attr type of " % z['pseudo_type'] + '.' + targets[0].attr)
-                self._attr_index[z['pseudo_type']][targets[0].attr]['pseudo_type'] = a
+                self._attr_index[z['pseudo_type']][targets[0].attr][0]['pseudo_type'] = a
                 if is_public:
-                    self._attr_index[z['pseudo_type']][targets[0].attr]['is_public'] = True
+                    self._attr_index[z['pseudo_type']][targets[0].attr][0]['is_public'] = True
             else:
                 a = value_node['pseudo_type']
-                self._attr_index[z['pseudo_type']][targets[0].attr] = {
+                self._attr_index[z['pseudo_type']][targets[0].attr] = [{
                     'type': 'class_attr',
                     'name':  targets[0].attr,
                     'pseudo_type': a,
-                    'is_public': is_public
-                }
+                    'is_public': is_public,
+                }, False]
+
                 self._attrs[z['pseudo_type']].append(targets[0].attr)
 
 
@@ -462,6 +465,71 @@ class ASTTranslator:
             #return self._translate_builtin_call(z['name'], targets[0].attr, [value_node])
 
 
+    def _translate_list(self, elts, ctx):
+        if not elts:
+            return {'type': 'list', 'elements': [], 'pseudo_type': ['List', None]}
+
+        element_nodes = [self._translate_node(elts[0])]
+        element_type = element_nodes[0]['pseudo_type']
+        for j in enumerate(elts[1:]):
+            element_nodes.append(self._translate_node(elts[j + 1]))
+            element_type = self._compatible_types(element_type, element_node[-1]['pseudo_type'], "can't use different types in a list")
+
+        return {
+            'type': 'list',
+            'pseudo_type': ['List', element_type],
+            'elements': element_nodes
+        }
+
+    def _translate_dict(self, keys, values):
+        if not keys:
+            return {'type': 'dictionary', 'pairs': [], 'pseudo_type': ['Dictionary', None, None]}
+
+        pairs = [{'type': 'pair', 'key': self._translate_node(keys[0]), 'value': self._translate_node(values[0])}]
+        key_type, value_type = pairs[0]['key']['pseudo_type'], pairs[0]['value']['pseudo_type']
+        for a, b in zip(keys[1:], values[1:]):
+            pairs.append({'type': 'pair', 'key': self._translate_node(a), 'value': self._translate_node(b)})
+            key_type, value_type = self._compatible_types(key_type, pairs[-1]['key']['pseudo_type'], "can't use different types for keys of a dictionary"),\
+                                   self._compatible_types(value_type, pairs[-1]['value']['pseudo_type'], "can't use different types for values of a dictionary")
+
+        return {
+            'type': 'dictionary',
+            'pseudo_type': ['Dictionary', key_type, value_type],
+            'pairs': pairs
+        }
+
+    def _translate_subscript(self, value, slice, ctx):
+        value_node = self._translate_node(value)
+        value_general_type = self.general_type(value_node['pseudo_type'])
+        if value_general_type not in ['String', 'List', 'Dictionary']:
+            raise PseudoPythonTypeCheckError('pseudo-python can use [] only on str, list or dict: %s' % value_node['pseudo_type'])
+
+        if isinstance(slice, ast.Index):
+            z = self._translate_node(slice.value)
+            if value_general_type in ['String', 'List'] and z['pseudo_type'] != 'Int':
+                raise PseudoPythonTypeCheckError('a non int index for %s %s' % (value_general_type, z['pseudo_type']))
+
+            if value_general_type == 'Dictionary' and z['pseudo_type'] != value_node['pseudo_type'][1]:
+                raise PseudoPythonTypeCheckError('a non %s index for %s %s' % (value_node['pseudo_type'][1], value_general_type, z['pseudo_type']))
+
+            if value_general_type == 'String':
+                pseudo_type = 'String'
+            elif value_general_type == 'List':
+                pseudo_type = value_node['pseudo_type'][1]
+            else:
+                pseudo_type = value_node['pseudo_type'][2]
+
+            return {
+                'type': 'index',
+                'sequence': value_node,
+                'index': z,
+                'pseudo_type': pseudo_type
+            }
+
+        else:
+            z = self._translate_node(slice)
+
+        pass
 
     def assert_translatable(self, node, **pairs):
         for label, (expected, actual) in pairs.items():
@@ -471,7 +539,7 @@ class ASTTranslator:
     def _translate_pure_functions(self):
         for f in self.definitions:
             print(self.type_env.values)
-            if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 1:
+            if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 2:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
 
     def _type_check(self, z, message, types):
@@ -515,3 +583,8 @@ class ASTTranslator:
             return to
 
 
+    def general_type(self, t):
+        if isinstance(t, list):
+            return t[0]
+        else:
+            return t
