@@ -1,20 +1,78 @@
 constants: []
-definitions: []
+definitions:
+- block:
+  - block:
+    - pseudo_type: Int
+      type: implicit_return
+      value: {pseudo_type: Int, type: int, value: 1}
+    otherwise:
+      block:
+      - pseudo_type: Int
+        type: implicit_return
+        value:
+          left:
+            args:
+            - left: {name: n, pseudo_type: Int, type: local}
+              op: '-'
+              pseudo_type: Int
+              right: {pseudo_type: Int, type: int, value: 1}
+              type: binary_op
+            function:
+              name: fib
+              pseudo_type: [Function, Int, Int]
+              type: local
+            pseudo_type: Int
+            type: call
+          op: '*'
+          pseudo_type: Int
+          right:
+            args:
+            - left: {name: n, pseudo_type: Int, type: local}
+              op: '-'
+              pseudo_type: Int
+              right: {pseudo_type: Int, type: int, value: 2}
+              type: binary_op
+            function:
+              name: fib
+              pseudo_type: [Function, Int, Int]
+              type: local
+            pseudo_type: Int
+            type: call
+          type: binary_op
+      pseudo_type: Void
+      type: else_statement
+    pseudo_type: Void
+    test:
+      left: {name: n, pseudo_type: Int, type: local}
+      op: <
+      pseudo_type: Boolean
+      right: {pseudo_type: Int, type: int, value: 2}
+      type: binary_op
+    type: if_statement
+  name: fib
+  params: [n]
+  pseudo_type: [Function, Int, Int]
+  return_type: Int
+  type: function_definition
 dependencies: []
 main:
-- local: s
+- local: f
   pseudo_type: Void
   type: local_assignment
-  value:
-    args:
+  value: {pseudo_type: Int, type: int, value: 4}
+  value_type: Int
+- block:
+  - args:
     - {pseudo_type: Int, type: int, value: 4}
-    message: repeat
-    pseudo_type: [List, Int]
-    receiver:
-      elements:
-      - {pseudo_type: Int, type: int, value: 2}
-      pseudo_type: [List, Int]
-      type: list
-    type: standard_method_call
-  value_type: [List, Int]
+    function: {name: fib, type: local}
+    pseudo_type: Int
+    type: call
+  pseudo_type: Void
+  test:
+    left: {name: f, pseudo_type: Int, type: local}
+    op: ==
+    pseudo_type: Boolean
+    right: {pseudo_type: Int, type: int, value: 2}
+    type: binary_op
+  type: while_statement
 type: module

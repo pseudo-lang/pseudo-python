@@ -25,13 +25,18 @@ ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
 
 INDEXABLE_TYPES = {'String', 'List', 'Dictionary', 'Array', 'Tuple'}
 
+COMPARABLE_TYPES = {'Int', 'Float', 'String'}
+
 OPS = {
     '+':  'add',
     '-':  'substract',
     '/':  'divide',
     '**': 'power',
     'and': 'logical_and',
-    '*':  'repeat'
+    '*':  'repeat',
+
+    '<':   'less_than',
+    '>':   'greater_than'
 }
 
 PSEUDO_OPS = {
@@ -41,7 +46,11 @@ PSEUDO_OPS = {
     ast.Mult: '*',
     ast.And: 'and',
     ast.Or:  'or',
-    ast.Pow: '**'
+    ast.Pow: '**',
+
+    ast.Eq: '==',
+    ast.Lt: '<',
+    ast.Gt: '>'
 }
 
 
@@ -132,7 +141,7 @@ class ASTTranslator:
                 self.type_env.top['functions'][n.name] = ['Function'] + ([None] * len(n.args.args)) + [None]
                 self.type_env.top[n.name] = self.type_env.top['functions'][n.name]
             elif isinstance(n, ast.ClassDef):
-                self.assert_translatable(decorator_list=([], n.decorator_list))
+                self.assert_translatable('class', decorator_list=([], n.decorator_list))
                 self._hierarchy[n.name] = (None, set())
                 if n.bases:
                     if len(n.bases) != 0 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
@@ -440,6 +449,41 @@ class ASTTranslator:
                 'pseudo_type': binop_type
             }
 
+    def _translate_compare(self, left, ops, comparators):
+        op = PSEUDO_OPS[type(ops[0])]
+        right_node = self._translate_node(comparators[0])
+        left_node = self._translate_node(left)
+
+        self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'])
+        
+        result = {
+            'type': 'binary_op',
+            'op':   op,
+            'left': left_node,
+            'right': right_node,
+            'pseudo_type': 'Boolean'
+        }
+        if len(comparators) == 1:
+            return result
+        else:
+            result = [result]
+            for r in comparators[1:]:
+                left_node, right_node = right_node, self._translate_node(r)
+                self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'])
+                result = {
+                    'type': 'binary_op',
+                    'op': 'and',
+                    'left': left_node,
+                    'right': result,
+                    'pseudo_type': 'Boolean'
+                }
+            return result
+
+    def _confirm_comparable(self, l, r):
+        if isinstance(l, list) or isinstance(r, list) or\
+           l != r or l not in COMPARABLE_TYPES:
+            raise PseudoPythonTypeCheckError("%s not comparable with %s" % (serialize_type(l), serialize_type(r)))
+
     def _translate_attribute(self, value, attr, ctx):
         value_node = self._translate_node(value)
         if not isinstance(value_node['pseudo_type'], str):
@@ -524,6 +568,40 @@ class ASTTranslator:
             }
             #return self._translate_builtin_call(z['name'], targets[0].attr, [value_node])
 
+
+    def _translate_if(self, test, orelse, body, base=True):
+        test_node = self._translate_node(test)
+        if test_node['pseudo_type'] != 'Boolean':
+            raise PseudoPythonTypeCheckError('%s expects a bool test not %s' % ('if' if base else 'elif', serialize_type(test_node['pseudo_type'])))
+        
+        block = [self._translate_node(child) for child in body]
+        if isinstance(orelse, ast.If):
+            otherwise = self._translate_if(orelse.test, orelse.orelse, orelse.body, False)
+        elif orelse:
+            otherwise = {
+                'type': 'else_statement',
+                'block': [self._translate_node(node) for node in orelse],
+                'pseudo_type': 'Void'
+            }
+        return {
+            'type': 'if_statement' if base else 'elseif_statement',
+            'test': test_node,
+            'block': block,
+            'pseudo_type': 'Void',
+            'otherwise': otherwise
+        }
+
+    def _translate_while(self, body, test, orelse):
+        self.assert_translatable('while', orelse=([], orelse))
+        test_node = self._translate_node(test)
+        if test_node['pseudo_type'] != 'Boolean':
+            raise PseudoPythonTypeCheckError('while expects a bool test not %s' % serialize_type(test_node['pseudo_type']))
+        return {
+            'type': 'while_statement',
+            'test': test_node,
+            'block': [self._translate_node(node) for node in body],
+            'pseudo_type': 'Void'
+        }
 
     def _translate_list(self, elts, ctx):
         if not elts:
