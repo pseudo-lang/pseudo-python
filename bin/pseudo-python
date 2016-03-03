@@ -27,3 +27,17 @@ def z():
 
 if __name__ == '__main__':
     z()
+
+'''
+
+error messages:
+
+show normal messages, just errors and
+
+show typecheck untranslatable messages with :
+  eventually info about what is ok to be translated 
+    comparable types are: Int, Float and String
+  eventually better examples using source line/column info or code examples of supported
+    def lala(e, f, *k): <- you can't use keyword arguments
+    def function_name(arg_1, arg2_..)
+'''
