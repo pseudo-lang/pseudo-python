@@ -68,6 +68,7 @@ class ASTTranslator:
         self._definition_index = {'functions': {}}
         self.constants = []
         self.main = []
+        self._exceptions = {'Exception'}
         self._hierarchy = {}
         self._attr_index = {}
         self._attrs = {}
@@ -145,7 +146,16 @@ class ASTTranslator:
                 self.assert_translatable('class', decorator_list=([], n.decorator_list))
                 self._hierarchy[n.name] = (None, set())
                 if n.bases:
-                    if len(n.bases) != 1 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
+                    if len(n.bases) == 1 and isinstance(n.bases[0], ast.Name) and n.bases[0].id in self._exceptions:
+                        self.main.append({
+                            'type': 'custom_exception',
+                            'name': n.name,
+                            'base': None if n.bases[0].id == 'Exception' else n.bases[0].id
+                        })
+                        self._exceptions.add(n.name)
+                        self.type_env[n.name] = 'ExceptionType'
+                        continue
+                    elif len(n.bases) != 1 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
                         raise PseudoPythonNotTranslatableError('only single inheritance from an already defined class is supported ? class %s' % n.name)
 
                     base = n.bases[0].id
@@ -530,7 +540,7 @@ class ASTTranslator:
             name = targets[0].id
             e = self.type_env[name]
             if e:
-                a = self._compatible_types(e, value_node['pseudo_type'], "can't change the type of variable %s in " % (name, self.function_name))
+                a = self._compatible_types(e, value_node['pseudo_type'], "can't change the type of variable %s in %s " % (name, self.function_name))
             else:
                 a = value_node['pseudo_type']
             self.type_env[name] = a
@@ -594,6 +604,9 @@ class ASTTranslator:
                 'block': [self._translate_node(node) for node in orelse],
                 'pseudo_type': 'Void'
             }
+        else:
+            otherwise = None
+
         return {
             'type': 'if_statement' if base else 'elseif_statement',
             'test': test_node,
@@ -724,6 +737,45 @@ class ASTTranslator:
     def _translate_str(self, s):
         return {'type': 'string', 'value': s, 'pseudo_type': 'String'}
     
+    def _translate_try(self, orelse, finalbody, body, handlers):
+        self.assert_translatable('try', else_=([], orelse), finally_=([], finalbody))
+
+        return {
+            'type': 'try_statement',
+            'pseudo_type': 'Void',
+            'block': [self._translate_node(node) for node in body],
+            'handlers': [self._translate_handler(handler) for handler in handlers]
+        }
+
+    def _translate_raise(self, exc, cause):
+        self.assert_translatable('raise', cause=(None, cause))
+        if not isinstance(exc.func, ast.Name) or exc.func.id not in self._exceptions:
+            raise PseudoPythonTypeCheckError('pseudo-python can raise only Exception or custom exceptions: %s ' % ast.dump(exc.func))
+
+        return {
+            'type': 'throw_statement',
+            'pseudo_type': 'Void',
+            'exception': exc.func.id,
+            'value': self._translate_node(exc.args[0])
+        }
+
+
+    def _translate_handler(self, handler):
+        if not isinstance(handler.type, ast.Name) or handler.type.id not in self._exceptions:
+            raise PseudoPythonTypeCheckError('%s' % str(ast.dump(handler.type)))
+        h = self.type_env[handler.name]
+        if h and h != 'Exception':
+            raise PseudoPythonTypeCheckError("can't change the type of exception %s to %s" % (handler.name, serialize_type(h)))
+        self.type_env[handler.name] = 'Exception'
+        return {
+            'type': 'exception_handler',
+            'pseudo_type': 'Void',
+            'exception': handler.type.id,
+            'is_builtin': handler.type.id == 'Exception',
+            'instance': handler.name,
+            'block': [self._translate_node(z) for z in handler.body]
+        }
+
     def _translate_nameconstant(self, value):
         if value == True or value == False:
             return {'type': 'boolean', 'value': value, 'pseudo_type': 'Boolean'}
@@ -881,7 +933,6 @@ class ASTTranslator:
         return sketchup, env
 
 
-
     def _confirm_iterable(self, sequence_type):
         sequence_general_type = self._general_type(sequence_type)
         if sequence_general_type not in ITERABLE_TYPES:
@@ -899,7 +950,7 @@ class ASTTranslator:
     def assert_translatable(self, node, **pairs):
         for label, (expected, actual) in pairs.items():
             if actual != expected:
-                raise PseudoPythonNotTranslatableError("%s in %s is not a part of pseudo-translatable python" % (label, node))
+                raise PseudoPythonNotTranslatableError("%s in %s is not a part of pseudo-translatable python" % (label if label[-1] != '_' else label[:-1], node))
 
     def _translate_pure_functions(self):
         for f in self.definitions:
