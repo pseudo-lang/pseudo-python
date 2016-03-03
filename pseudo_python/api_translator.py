@@ -94,7 +94,8 @@ FUNCTION_API = {
     're': {
         'match':    StandardMethodCall('Regexp', 'match'),
         'sub':      StandardMethodCall('Regexp', 'replace'),
-        'compile':  StandardRegex()
+        'compile':  StandardRegex(),
+        'escape':   StandardCall('regexp', 'escape')
     }
 }
 
@@ -136,6 +137,24 @@ METHOD_API = {
 
     'RegexpMatch': {
         'group':    StandardMethodCall('RegexpMatch', 'group')
+    }
+}
+
+OPERATOR_API = {
+    'List':  {
+        '+':    'push_many',
+        '*':    'repeat'
+    },
+    'Set':  {
+        '|':    'union',
+        '&':    'intersection',
+        '^':    'symmetric_diff',
+        '-':    'diff'
+    },
+    'String': { 
+        '+':    'concat',
+        '*':    'repeat',
+        '%':    'c_format'
     }
 }
 

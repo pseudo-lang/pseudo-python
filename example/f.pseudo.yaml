@@ -2,31 +2,23 @@ constants: []
 definitions: []
 dependencies: []
 main:
-- local: f
+- local: h
   pseudo_type: Void
   type: local_assignment
-  value: {pseudo_type: String, type: string, value: apolonia.txt}
+  value: {pseudo_type: String, type: string, value: ''}
   value_type: String
-- local: source
+- local: f
   pseudo_type: Void
   type: local_assignment
   value:
     args:
-    - {name: f, pseudo_type: String, type: local}
-    function: read_file
-    namespace: io
+    - elements:
+      - {name: h, pseudo_type: String, type: local}
+      pseudo_type: [Array, String]
+      type: list
+    message: c_format
     pseudo_type: String
-    type: standard_call
-  value_type: String
-- args:
-  - args:
-    - {pseudo_type: String, type: string, value: \n}
-    message: split
-    pseudo_type: [List, String]
-    receiver: {name: source, pseudo_type: String, type: local}
+    receiver: {pseudo_type: String, type: string, value: n%s}
     type: standard_method_call
-  function: display
-  namespace: io
-  pseudo_type: Void
-  type: standard_call
+  value_type: String
 type: module

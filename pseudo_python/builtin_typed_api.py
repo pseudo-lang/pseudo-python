@@ -60,8 +60,9 @@ def serialize_type(l):
     if isinstance(l, str):
         return l
     elif isinstance(l, list):
-        print(l)
         return '%s[%s]' % (l[0], ', '.join(map(serialize_type, l[1:])))
+    else:
+        return str(l)
 
 def add(l, r):
     if l == 'Float' and r in ['Float', 'Int']  or r == 'Float' and l in ['Float', 'Int']:
@@ -100,14 +101,24 @@ def div(l, r):
         return [l, r, 'Float']
     elif l == 'Int' and r == 'Int':
         return [l, r, 'Int']
-    raise PseudoPythonTypeCheckError("wrong types for /: %s and %s" % (serialize_type(l), serialize_type(r)))
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for /: %s and %s" % (serialize_type(l), serialize_type(r)))
 
 def pow_(l, r):
     if l == 'Float' and r in ['Float', 'Int'] or r == 'Float' and l in ['Float', 'Int']:
         return [l, r, 'Float']
     elif l == 'Int' and r == 'Int':
         return [l, r, 'Int']
-    raise PseudoPythonTypeCheckError("wrong types for **: %s and %s" % (serialize_type(l), serialize_type(r)))
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for **: %s and %s" % (serialize_type(l), serialize_type(r)))
+
+def mod(l, r):
+    if l == 'Int' and r == 'Int':
+        return [l, r, 'Int']
+    elif l == 'String' and (r == 'String' or r == ['Array', 'String']):
+        return [l, ['Array', 'String'], 'String']
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for %: %s and %s" % (serialize_type(l), serialize_type(r)))
 
 # for template types as list, dict @t is the type of list arg and @k, @v of dict args
 TYPED_API = {
@@ -125,12 +136,18 @@ TYPED_API = {
         'write_file':  ['String', 'String', 'Void']
     },
 
+    'regexp': {
+        'compile':      ['String', 'Regexp'],
+        'escape':       ['String', 'String']
+    },
+
     'operators': {
         '+': add,
         '-': sub,
         '*': mul,
         '/': div,
-        '**': pow_
+        '**': pow_,
+        '%': mod
     },
     
     'List': {
@@ -148,13 +165,16 @@ TYPED_API = {
         'find':       ['String', 'Int'],
         'ljust':      ['Int', 'String', 'String'],
         'join':       [['List', 'String'], 'String'],
-        'split':      ['String', ['List', 'String']]
+        'split':      ['String', ['List', 'String']],
+        '%':          [['Array', 'String'], 'String']
     },
     'Set': {
         '|':           [['Set', '@t'], ['Set', '@t']],
         'add':         ['@t', 'Void'],
         'remove':      ['@t', 'Void'],
-        'intersection': [['Set', '@t'], ['Set', '@t']]
+        '&':           [['Set', '@t'], ['Set', '@t']],
+        '^':           [['Set', '@t'], ['Set', '@t']],
+        '-':           [['Set', '@t'], ['Set', '@t']]
     },
 
     'Array': {

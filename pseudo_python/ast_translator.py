@@ -2,7 +2,7 @@ import ast
 import pseudo_python.env
 from pseudo_python.builtin_typed_api import TYPED_API, serialize_type
 from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError
-from pseudo_python.api_translator import Standard, StandardCall, StandardMethodCall, FUNCTION_API, METHOD_API
+from pseudo_python.api_translator import Standard, StandardCall, StandardMethodCall, FUNCTION_API, METHOD_API, OPERATOR_API
 
 BUILTIN_TYPES = {
     'int':      'Int',
@@ -23,21 +23,15 @@ BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int'}
 
 ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
 
+TESTABLE_TYPE = 'Boolean'
+
 INDEXABLE_TYPES = {'String', 'List', 'Dictionary', 'Array', 'Tuple'}
 
 COMPARABLE_TYPES = {'Int', 'Float', 'String'}
 
-OPS = {
-    '+':  'add',
-    '-':  'substract',
-    '/':  'divide',
-    '**': 'power',
-    'and': 'logical_and',
-    '*':  'repeat',
+TYPES_WITH_LENGTH = {'String', 'List', 'Dictionary', 'Array', 'Tuple', 'Set'}
 
-    '<':   'less_than',
-    '>':   'greater_than'
-}
+NUMBER_TYPES = {'Int', 'Float'}
 
 PSEUDO_OPS = {
     ast.Add: '+',
@@ -45,12 +39,12 @@ PSEUDO_OPS = {
     ast.Div: '/',
     ast.Mult: '*',
     ast.And: 'and',
-    ast.Or:  'or',
     ast.Pow: '**',
 
     ast.Eq: '==',
     ast.Lt: '<',
-    ast.Gt: '>'
+    ast.Gt: '>',
+    ast.Mod: '%'
 }
 
 
@@ -252,8 +246,10 @@ class ASTTranslator:
 
             # if isinstance(id_type, list):
             # id_type = tuple(['Function'] + id_type)
-
-            return {'type': 'local', 'name': id, 'pseudo_type': id_type}
+            if id == 'self':
+                return {'type': 'this', 'pseudo_type': id_type}
+            else:
+                return {'type': 'local', 'name': id, 'pseudo_type': id_type}
 
     def _translate_call(self, func, args, keywords, starargs, kwargs):
         self.assert_translatable('call', keywords=([], keywords), starargs=(None, starargs), kwargs=(None, kwargs))
@@ -264,11 +260,14 @@ class ASTTranslator:
 
         func_node = self._translate_node(func)
 
+        print('CALL CALL ', func_node, arg_nodes[:1])
         if func_node['type'] == 'attr':
             if func_node['object']['pseudo_type'] == 'library': # math.log
                 return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes)
             elif self.current_class and self.current_class != 'functions' and isinstance(func.value, ast.Name) and func.value.id == 'self':
                 node_type = 'this_method_call'
+            elif self.current_class and self.current_class != 'functions' and func_node['object']['pseudo_type'] == 'instance_variable':
+                node_type = 'this_method_call'                
             elif self._general_type(func_node['object']['pseudo_type']) in PSEUDON_BUILTIN_TYPES: # [2].append
                 return self._translate_builtin_method_call(self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
             else:
@@ -277,17 +276,16 @@ class ASTTranslator:
             return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
 
         else:
-            if func_node['type'] == 'local' and func_node['pseudo_type'][-1] is None:
-                return self._translate_real_method_call('call', 'functions', None, func_node['name'], arg_nodes)
+            if (func_node['type'] == 'local' or func_node['type'] == 'this') and func_node['pseudo_type'][-1] is None:
+                return self._translate_real_method_call('call', 'functions', None, 'self' if func_node['type'] == 'this' else func_node['name'], arg_nodes)
             elif func_node['type'] == 'typename':
                 return self._translate_init(func_node['name'], arg_nodes)
             elif func_node['type'] == 'library_function':
                 return self._translate_builtin_call(func_node['library'], func_node['function'], arg_nodes)
             else:
-                if not isinstance(func_node['pseudo_type'], list) or func_node['pseudo_type'][0] != 'Function':
-                    # print(func_node['name'] if 'name' in func_node else func_node['type'])
-                    raise PseudoPythonTypeCheckError("trying to call value" %
-                        ((func_node['name'] if 'name' in func_node else func_node['type']) + ' ' + serialize_type(func_node['pseudo_type'])))
+                if self._general_type(func_node['pseudo_type']) != 'Function':
+                    raise PseudoPythonTypeCheckError("trying to call %s with %s " %
+                        ((func_node['name'] if 'name' in func_node else func_node['type']),serialize_type(func_node['pseudo_type'])))
 
                 self._real_type_check(func_node['pseudo_type'], [arg_node['pseudo_type'] for arg_node in arg_nodes], (func_node['name'] if 'name' in func_node else func_node['type']))
                 z = func_node['pseudo_type'][-1]
@@ -310,7 +308,7 @@ class ASTTranslator:
             init[-1] = name
 
         for label, m in self._definition_index[name].items():
-            if len(self.type_env.top[name][label]) == 2:
+            if len(self.type_env.top[name][label]) == 2 and label != '__init__':
                 self._definition_index[name][label] = self._translate_function(m, name, {'pseudo_type': name}, label, [])
 
         return {
@@ -321,6 +319,7 @@ class ASTTranslator:
         }
 
     def _translate_real_method_call(self, node_type, z, receiver, message, params):
+        print(node_type, z, receiver, message)
         c = self.type_env.top[z]
         param_types = [param['pseudo_type'] for param in params]
         if message in c and len(c[message]) == 2 or len(c[message]) > 2 and c[message][1]:
@@ -457,10 +456,17 @@ class ASTTranslator:
                 'pseudo_type': binop_type
             }
         else:
+            if left_node['pseudo_type'] == 'String' and op == '%' and right_node['pseudo_type'] == 'String':
+                right_node = {
+                    'type': 'array',
+                    'pseudo_type': ['Array', 'String'],
+                    'elements': [right_node]
+                }
+
             return {
                 'type': 'standard_method_call',
                 'receiver': left_node,
-                'message': OPS[op],
+                'message': OPERATOR_API[self._general_type(left_node['pseudo_type'])][op],
                 'args': [right_node],
                 'pseudo_type': binop_type
             }
@@ -518,21 +524,32 @@ class ASTTranslator:
             attr_type = self._attr_index.get(value_general_type, {}).get(attr)
 
             if attr_type is None:
-                if METHOD_API.get(value_general_type, {}).get(attr):
-                    attr_type = 'builtin_method'
-                elif self.type_env.top.values.get(value_general_type, {}).get(attr):
-                    attr_type = 'user_method'
+                m = METHOD_API.get(value_general_type, {}).get(attr)
+                if m:
+                    attr_type = m #'builtin_method[%s]' % serialize_type(m)
                 else:
+                    m = self.type_env.top.values.get(value_general_type, {}).get(attr)
+                    if m:
+                        attr_type = m #'user_method[%s]' % serialize_type(m)
+
+                if not m:
                     raise PseudoPythonTypeCheckError("pseudo-python can't infer the type of %s.%s" % (value_node['pseudo_type'], attr))
             else:
                 attr_type = attr_type[0]['pseudo_type']
 
-            return {
-                'type': 'attr',
-                'object': value_node,
-                'attr': attr,
-                'pseudo_type': attr_type
-            }
+            if value_node['type'] == 'this':
+                return {
+                    'type': 'instance_variable',
+                    'name': attr,
+                    'pseudo_type': attr_type
+                }
+            else:
+                return {
+                    'type': 'attr',
+                    'object': value_node,
+                    'attr': attr,
+                    'pseudo_type': attr_type
+                }
 
     def _translate_assign(self, targets, value):
         if isinstance(value, ast.AST):
@@ -563,7 +580,7 @@ class ASTTranslator:
 
             if targets[0].attr in self._attr_index[z['pseudo_type']]:
                 a = self._compatible_types(self._attr_index[z['pseudo_type']][targets[0].attr][0]['pseudo_type'],
-                                           value_node['pseudo_type'], "can't change attr type of " % z['pseudo_type'] + '.' + targets[0].attr)
+                                           value_node['pseudo_type'], "can't change attr type of %s" % serialize_type(z['pseudo_type']) + '.' + targets[0].attr)
                 self._attr_index[z['pseudo_type']][targets[0].attr][0]['pseudo_type'] = a
                 if is_public:
                     self._attr_index[z['pseudo_type']][targets[0].attr][0]['is_public'] = True
@@ -578,7 +595,22 @@ class ASTTranslator:
 
                 self._attrs[z['pseudo_type']].append(targets[0].attr)
 
-
+            if z['type'] == 'this':
+                return {
+                    'type': 'instance_assignment',
+                    'name': targets[0].attr,
+                    'value': value_node,
+                    'pseudo_type': 'Void',
+                    'value_type': value_node['pseudo_type']
+                }
+            elif z['type'] == 'index':
+                return {
+                    'type': 'index_assignment',
+                    'sequence': z['sequence'],
+                    'value': value_node,
+                    'pseudo_type': 'Void',
+                    'value_type': value_node['pseudo_type']
+                }         
             return {
                 'type': 'attr_assignment',
                 'attr': {
@@ -588,16 +620,15 @@ class ASTTranslator:
                     'pseudo_type': a
                  },
                 'value': value_node,
-                'pseudo_type': 'Void'
+                'pseudo_type': 'Void',
+                'value_type': value_node['pseudo_type']
             }
-            #return self._translate_builtin_call(z['name'], targets[0].attr, [value_node])
-
+    
+    def _translate_augassign(self, target, op, value):
+        return self._translate_assign([target], ast.BinOp(target, op, value))
 
     def _translate_if(self, test, orelse, body, base=True):
-        test_node = self._translate_node(test)
-        if test_node['pseudo_type'] != 'Boolean':
-            raise PseudoPythonTypeCheckError('%s expects a bool test not %s' % ('if' if base else 'elif', serialize_type(test_node['pseudo_type'])))
-
+        test_node = self._testable(self._translate_node(test))
         block = [self._translate_node(child) for child in body]
         if isinstance(orelse, ast.If):
             otherwise = self._translate_if(orelse.test, orelse.orelse, orelse.body, False)
@@ -620,15 +651,51 @@ class ASTTranslator:
 
     def _translate_while(self, body, test, orelse):
         self.assert_translatable('while', orelse=([], orelse))
-        test_node = self._translate_node(test)
-        if test_node['pseudo_type'] != 'Boolean':
-            raise PseudoPythonTypeCheckError('while expects a bool test not %s' % serialize_type(test_node['pseudo_type']))
+        test_node = self._testable(self._translate_node(test))
         return {
             'type': 'while_statement',
             'test': test_node,
             'block': [self._translate_node(node) for node in body],
             'pseudo_type': 'Void'
         }
+
+    def _testable(self, test_node):
+        t = self._general_type(test_node['pseudo_type'])
+        if t != TESTABLE_TYPE:
+            if t in TYPES_WITH_LENGTH:
+                return {
+                    'type': 'comparison',
+                    'pseudo_type': 'Boolean',
+                    'op': '>',
+                    'left': {
+                        'type': 'standard_method_call',
+                        'pseudo_type': 'Int',
+                        'receiver': test_node,
+                        'message': 'length',
+                        'args': []
+                    },
+                    'right': {'type': 'int', 'pseudo_type': 'Int', 'value': 0}
+                }
+            elif t in NUMBER_TYPES:
+                return {
+                    'type': 'comparison',
+                    'pseudo_type': 'Boolean',
+                    'op': '>',
+                    'left': test_node,
+                    'right': {'type': 'int', 'pseudo_type': 'Int', 'value': 0}
+                }
+            elif t == 'RegexpMatch':
+                return {
+                    'type': 'standard_method_call',
+                    'pseudo_type': 'Boolean',
+                    'receiver': test_node,
+                    'message': 'has_match',
+                    'args': []
+                }
+            else:
+                raise PseudoPythonTypeCheckError('pseudo-python expects a bool or RegexpMatch test not %s' % serialize_type(test_node['pseudo_type']))
+        else:
+            return test_node
 
     def _translate_list(self, elts, ctx):
         if not elts:
@@ -832,11 +899,7 @@ class ASTTranslator:
         if not generators[0].ifs:
             sketchup['function'] = 'map'
         else:
-            test_node = self._translate_node(generators[0].ifs[0])
-            if test_node['pseudo_type'] != 'Boolean':
-                test_type = serialize_type(test_node['pseudo_type'])
-                raise PseudoPythonTypeCheckError('Expected a bool test in list comprehension: %s' % test_type)
-
+            test_node = self._testable(self._translate_node(generators[0].ifs[0]))
             sketchup['function'] = 'filter_map'
             sketchup['test'] = [test_node]
 
