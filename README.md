@@ -17,19 +17,31 @@ This Python to `Pseudo` translator would add automatic support for
 ## supported subset
 
 `Pseudo` supports a very clear and somehow limited subset of a language:
-
-  * basic types: integer, float, string, boolean, nil
+  
+  * basic types and collections and standard library methods for them
+  
+  * integer, float, string, boolean, nil
   * lists
   * dicts
-  * standard library methods for the basic types
+  * sets
+  * tuples(fixed length heterogeneous lists)
+  * fixed size arrays
+  * regular expressions
+
   * functions with normal parameters (no default/keyword/vararg parameters)
-  * classes (only as a constructor + a collection of instance methods, no fancy metaprogramming etc supported)
-  * iteration (for-in loops / while)
+  * classes 
+    * single inheritance
+    * polymorphism
+    * no dynamic instance variables
+    * basically a constructor + a collection of instance methods, no fancy metaprogramming etc supported
+
+  * exception-based error handling with support for custom exceptions
+  
+  * io: print/input, file read/write, system and subprocess commands
+
+  * iteration (for-in-range / for-each / for-in-zip / while)
   * conditionals (if / else if / else)
   * standard math/logical operations
-  * basic exception-based error handling
-  * standard io: print/input, file read/write, basic http requests
-  * error handling and custom exceptions (basic support for builtin exceptions)
 
 ## why
 
@@ -49,15 +61,18 @@ existing project.
 
 You can almost think of it in a "~json-for-algorithms" way: we express
 our code with standard basic types, collections and simple classes and we can translate to a common format(pseudo code) and using it as a middle ground between each supported language
-  
+
+Error handling: weak support for builtin exceptions, only catching
+and raising an Exception
+
 ## pseudo-python progress
 
-- [ ] type inference
-  - [ ] infers from function usage
-  - [ ] checks if return type is consistent
-  - [ ] infers collection element types
-  - [ ] infers class attributes and their types
+- [x] type inference
+  - [x] checks if return type is consistent
+  - [x] infers collection element types
+  - [x] infers class attributes and their types
 
-- [ ] supported pseudo-translayable syntax
-  - [ ] functions
-  - [ ] classes
+- [x] supported pseudo-translayable syntax
+  - [x] functions
+  - [x] classes
+  - [x] a lot of stuff
