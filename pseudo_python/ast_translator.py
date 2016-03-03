@@ -254,7 +254,6 @@ class ASTTranslator:
 
         func_node = self._translate_node(func)
 
-        print(func_node)
         if func_node['type'] == 'attr':
             if func_node['object']['pseudo_type'] == 'library': # math.log
                 return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes)
@@ -391,7 +390,7 @@ class ASTTranslator:
                 self.is_last = True
             children.append(self._translate_node(child))
             print(self.type_env.values)
-            print(args);input()
+            # print(args);input()
         self.function_name = outer_function_name
         self.current_class = outer_current_class
 
@@ -399,14 +398,14 @@ class ASTTranslator:
 
 
         if z == 'functions':
-            type = 'function_definition'
+            node_name = 'function_definition'
         elif name == '__init__':
-            type = 'constructor'
+            node_name = 'constructor'
         else:
-            type = 'function_definition'
+            node_name = 'method_definition'
 
         q = {
-            'type':   type,
+            'type':   node_name,
             'name':   name,
             'params': [node_arg.arg for node_arg in node_args],
             'pseudo_type': self.type_env.top[z][name],
@@ -507,13 +506,18 @@ class ASTTranslator:
 
         else:
             value_general_type = self._general_type(value_node['pseudo_type'])
-            attr_type = self._attrs.get(value_general_type)
+            attr_type = self._attr_index.get(value_general_type, {}).get(attr)
+
             if attr_type is None:
                 if METHOD_API.get(value_general_type, {}).get(attr):
                     attr_type = 'builtin_method'
+                elif self.type_env.top.values.get(value_general_type, {}).get(attr):
+                    attr_type = 'user_method'
                 else:
                     raise PseudoPythonTypeCheckError("pseudo-python can't infer the type of %s.%s" % (value_node['pseudo_type'], attr))
-
+            else:
+                attr_type = attr_type[0]['pseudo_type']
+            
             return {
                 'type': 'attr',
                 'object': value_node,

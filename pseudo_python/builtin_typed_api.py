@@ -17,7 +17,6 @@ _ = ()
 # that helps us with inherited methods: each one updates the type signature for the whole hierarchy
 
 def builtin_type_check(namespace, function, receiver, args):
-    print(function, namespace, receiver)
     x = TYPED_API[namespace][function]
     a = namespace + '#' + function if receiver else namespace + ':' + function
     if namespace == 'List' or namespace == 'Set' or namespace == 'Array':

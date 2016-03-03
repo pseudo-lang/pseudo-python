@@ -18,7 +18,31 @@ definitions:
     return_type: null
     this: {name: Shape, type: typename}
     type: constructor
-  methods: []
+  methods:
+  - block:
+    - pseudo_type: Int
+      type: implicit_return
+      value:
+        left:
+          attr: a
+          object: {name: self, pseudo_type: Shape, type: local}
+          pseudo_type: Int
+          type: attr
+        op: '*'
+        pseudo_type: Int
+        right:
+          attr: a
+          object: {name: self, pseudo_type: Shape, type: local}
+          pseudo_type: Int
+          type: attr
+        type: binary_op
+    is_public: true
+    name: area
+    params: []
+    pseudo_type: [Function, Int]
+    return_type: Int
+    this: {name: Shape, type: typename}
+    type: method_definition
   name: Shape
   type: class_definition
 dependencies: []
@@ -33,4 +57,9 @@ main:
     pseudo_type: Shape
     type: new_instance
   value_type: Shape
+- args: []
+  message: area
+  pseudo_type: Int
+  receiver: {name: s, pseudo_type: Shape, type: local}
+  type: method_call
 type: module
