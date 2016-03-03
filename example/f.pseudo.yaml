@@ -54,6 +54,34 @@ definitions:
   pseudo_type: [Function, Int, Int]
   return_type: Int
   type: function_definition
+- block:
+  - block:
+    - args:
+      - {name: j, pseudo_type: Int, type: local}
+      function: display
+      namespace: io
+      pseudo_type: Void
+      type: standard_call
+    iterators:
+      index: {name: j, pseudo_type: Int, type: local}
+      iterator: {name: k, pseudo_type: Int, type: local}
+      type: for_iterator_with_index
+    pseudo_type: Void
+    sequences:
+      sequence:
+        name: l
+        pseudo_type: [List, Int]
+        type: local
+      type: for_sequence_with_index
+    type: for_statement
+  name: huh
+  params: [l]
+  pseudo_type:
+  - Function
+  - [List, Int]
+  - null
+  return_type: null
+  type: function_definition
 dependencies: []
 main:
 - local: f
@@ -75,4 +103,12 @@ main:
     right: {pseudo_type: Int, type: int, value: 2}
     type: binary_op
   type: while_statement
+- args:
+  - elements:
+    - {pseudo_type: Int, type: int, value: 2}
+    pseudo_type: [List, Int]
+    type: list
+  function: {name: huh, type: local}
+  pseudo_type: null
+  type: call
 type: module

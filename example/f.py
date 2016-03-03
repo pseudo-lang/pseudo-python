@@ -4,9 +4,15 @@ def fib(n):
 	else:
 		return fib(n - 1) * fib(n - 2)
 
+def huh(l):
+	for j, k in enumerate(l):
+		print(j)
+
 f = 4
 while f == 2:
 	fib(4)
+huh([2])
+
 # import re
 
 # e = {2}

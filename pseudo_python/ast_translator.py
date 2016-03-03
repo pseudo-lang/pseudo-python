@@ -789,7 +789,7 @@ class ASTTranslator:
         }, {target.id: target_pseudo_type}
 
 
-    def _translate_enumerable(self, targets, sequence):
+    def _translate_enumerate(self, targets, sequence):
         sequence_node = self._translate_node(sequence)
         self._confirm_iterable(sequence_node['pseudo_type'])
 
@@ -799,11 +799,11 @@ class ASTTranslator:
         if self._general_type(sequence_node['pseudo_type']) == 'Dictionary':
             q = 'items'
             k = 'key'
-            v = 'iterator'
+            v = 'value'
         else:
             q = 'index'
             k = 'index'
-            v = 'value'
+            v = 'iterator'
         iterator_type = self._element_type(sequence_node['pseudo_type'])
         return {
             'type': '',
@@ -894,6 +894,19 @@ class ASTTranslator:
             print(self.type_env.values)
             if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 2:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
+
+    def _translate_for(self, iter, target, body, orelse):
+        self.assert_translatable('for', orelse=([], orelse))
+        sketchup, env = self._translate_iter(target, iter)
+        for label, value in env.items():
+            if self.type_env[label]:
+                raise PseudoPythonTypeCheckError("pseudo-python forbirds %s shadowing a variable in for" % label)
+            self.type_env[label] = value                
+        self.in_for = True
+        sketchup['block'] = [self._translate_node(z) for z in body]
+        sketchup['type'] = 'for' + sketchup['type'] + '_statement'
+        sketchup['pseudo_type'] = 'Void'
+        return sketchup
 
     def _type_check(self, z, message, types):
         g = self.type_env.top.values.get(z, {}).get(message)
