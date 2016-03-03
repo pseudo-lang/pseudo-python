@@ -2,63 +2,31 @@ constants: []
 definitions: []
 dependencies: []
 main:
-- {base: null, name: NeptunError, type: custom_exception}
-- {base: NeptunError, name: IntergallacticError, type: custom_exception}
 - local: f
   pseudo_type: Void
   type: local_assignment
-  value: {pseudo_type: Int, type: int, value: 2}
-  value_type: Int
-- block:
-  - local: f
-    pseudo_type: Void
-    type: local_assignment
-    value: {pseudo_type: Int, type: int, value: 2}
-    value_type: Int
-  - block:
-    - exception: NeptunError
-      pseudo_type: Void
-      type: throw_statement
-      value: {pseudo_type: String, type: string, value: why f}
-    otherwise: null
-    pseudo_type: Void
-    test:
-      left: {name: f, pseudo_type: Int, type: local}
-      op: ==
-      pseudo_type: Boolean
-      right: {pseudo_type: Int, type: int, value: 2}
-      type: binary_op
-    type: if_statement
-  - local: h
-    pseudo_type: Void
-    type: local_assignment
-    value: {pseudo_type: Int, type: int, value: 2}
-    value_type: Int
-  handlers:
-  - block:
-    - args:
-      - {name: e, pseudo_type: Exception, type: local}
-      function: display
-      namespace: io
-      pseudo_type: Void
-      type: standard_call
-    exception: IntergallacticError
-    instance: e
-    is_builtin: false
-    pseudo_type: Void
-    type: exception_handler
-  - block:
-    - args:
-      - {name: e, pseudo_type: Exception, type: local}
-      function: display
-      namespace: io
-      pseudo_type: Void
-      type: standard_call
-    exception: NeptunError
-    instance: e
-    is_builtin: false
-    pseudo_type: Void
-    type: exception_handler
+  value: {pseudo_type: String, type: string, value: apolonia.txt}
+  value_type: String
+- local: source
   pseudo_type: Void
-  type: try_statement
+  type: local_assignment
+  value:
+    args:
+    - {name: f, pseudo_type: String, type: local}
+    function: read_file
+    namespace: io
+    pseudo_type: String
+    type: standard_call
+  value_type: String
+- args:
+  - args:
+    - {pseudo_type: String, type: string, value: \n}
+    message: split
+    pseudo_type: [List, String]
+    receiver: {name: source, pseudo_type: String, type: local}
+    type: standard_method_call
+  function: display
+  namespace: io
+  pseudo_type: Void
+  type: standard_call
 type: module

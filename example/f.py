@@ -1,16 +1,5 @@
-class NeptunError(Exception):
-    pass
+f = 'apolonia.txt'
+with open(f, 'r') as handler:
+    source = handler.read()
 
-class IntergallacticError(NeptunError):
-    pass
-
-f = 2
-try:
-    f = 2
-    if f == 2:
-        raise NeptunError("why f")
-    h = 2
-except IntergallacticError as e:
-    print(e)
-except NeptunError as e:
-    print(e)
+print(source.split('\n'))

@@ -134,7 +134,7 @@ class ASTTranslator:
             if isinstance(n, ast.Import):
                 if self.definitions or self.main:
                     raise PseudoPythonNotTranslatableError('imports can be only on top: %s' % n.names[0].name)
-                self._imports.add(n.names[0].name)                    
+                self._imports.add(n.names[0].name)
                 self.type_env.top[n.names[0].name] = 'library'
 
             elif isinstance(n, ast.FunctionDef):
@@ -286,7 +286,7 @@ class ASTTranslator:
             else:
                 if not isinstance(func_node['pseudo_type'], list) or func_node['pseudo_type'][0] != 'Function':
                     # print(func_node['name'] if 'name' in func_node else func_node['type'])
-                    raise PseudoPythonTypeCheckError("trying to call value" % 
+                    raise PseudoPythonTypeCheckError("trying to call value" %
                         ((func_node['name'] if 'name' in func_node else func_node['type']) + ' ' + serialize_type(func_node['pseudo_type'])))
 
                 self._real_type_check(func_node['pseudo_type'], [arg_node['pseudo_type'] for arg_node in arg_nodes], (func_node['name'] if 'name' in func_node else func_node['type']))
@@ -471,7 +471,7 @@ class ASTTranslator:
         left_node = self._translate_node(left)
 
         self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'])
-        
+
         result = {
             'type': 'binary_op',
             'op':   op,
@@ -526,7 +526,7 @@ class ASTTranslator:
                     raise PseudoPythonTypeCheckError("pseudo-python can't infer the type of %s.%s" % (value_node['pseudo_type'], attr))
             else:
                 attr_type = attr_type[0]['pseudo_type']
-            
+
             return {
                 'type': 'attr',
                 'object': value_node,
@@ -535,7 +535,10 @@ class ASTTranslator:
             }
 
     def _translate_assign(self, targets, value):
-        value_node = self._translate_node(value)
+        if isinstance(value, ast.AST):
+            value_node = self._translate_node(value)
+        else:
+            value_node = value
         if isinstance(targets[0], ast.Name):
             name = targets[0].id
             e = self.type_env[name]
@@ -594,7 +597,7 @@ class ASTTranslator:
         test_node = self._translate_node(test)
         if test_node['pseudo_type'] != 'Boolean':
             raise PseudoPythonTypeCheckError('%s expects a bool test not %s' % ('if' if base else 'elif', serialize_type(test_node['pseudo_type'])))
-        
+
         block = [self._translate_node(child) for child in body]
         if isinstance(orelse, ast.If):
             otherwise = self._translate_if(orelse.test, orelse.orelse, orelse.body, False)
@@ -666,7 +669,7 @@ class ASTTranslator:
         }
 
     def _translate_tuple(self, elts, ctx):
-        element_nodes, accidentaly_homogeneous, element_type = self._translate_elements(elts, 'tuple', homogeneous=False) 
+        element_nodes, accidentaly_homogeneous, element_type = self._translate_elements(elts, 'tuple', homogeneous=False)
 
         return {
             'type': 'tuple',
@@ -735,8 +738,8 @@ class ASTTranslator:
             z = self._translate_node(slice)
 
     def _translate_str(self, s):
-        return {'type': 'string', 'value': s, 'pseudo_type': 'String'}
-    
+        return {'type': 'string', 'value': s.replace('\n', '\\n'), 'pseudo_type': 'String'}
+
     def _translate_try(self, orelse, finalbody, body, handlers):
         self.assert_translatable('try', else_=([], orelse), finally_=([], finalbody))
 
@@ -758,6 +761,40 @@ class ASTTranslator:
             'exception': exc.func.id,
             'value': self._translate_node(exc.args[0])
         }
+
+
+    def _translate_with(self, items, body):
+        if len(items) != 1 or not isinstance(items[0].context_expr, ast.Call) or not isinstance(items[0].context_expr.func, ast.Name) or items[0].context_expr.func.id != 'open':
+            print(not isinstance(items[0].context_expr, ast.Call))
+            raise PseudoPythonTypeCheckError('pseudo-python supports with only for opening files')
+        elif not isinstance(items[0].optional_vars, ast.Name):
+           raise PseudoPythonTypeCheckError('pseudo-python needs exactly one name var for with statements' )
+        optional_vars = items[0].optional_vars
+        items = [items[0].context_expr]
+
+        if len(body) == 1 and len(items[0].args) > 1:
+            arg_node = self._translate_node(items[0].args[0])
+            if arg_node['pseudo_type'] == 'String' and isinstance(body[0], ast.Assign) and len(body[0].targets) == 1 and\
+               isinstance(items[0].args[1], ast.Str) and 'r' in items[0].args[1].s and\
+               isinstance(body[0].value, ast.Call) and isinstance(body[0].value.func, ast.Attribute) and isinstance(body[0].value.func.value, ast.Name) and body[0].value.func.value.id == optional_vars.id and body[0].value.func.attr == 'read' and not body[0].value.args:
+                return self._translate_assign(targets=body[0].targets, value= {
+                    'type': 'standard_call',
+                    'namespace': 'io',
+                    'function': 'read_file',
+                    'args': [arg_node],
+                    'pseudo_type': 'String'
+                })
+            elif arg_node['pseudo_type'] == 'String' and isinstance(body[0], ast.Call) and isinstance(body[0].func, ast.Attribute) and isinstance(body[0].func.value, ast.Name) and body[0].func.value.id == optional_vars.id and body[0].func.attr == 'write':
+                z == self._translate_node(body[0].func.args[0])
+                return {
+                    'type': 'standard_call',
+                    'namespace': 'io',
+                    'function': 'write_file',
+                    'args': [arg_node, z],
+                    'pseudo_type': 'Void'
+                }
+
+        raise PseudoPythonTypeCheckError('the supported format for with requires exactly one line in body which is [<name> =] <handler>.read/write(..)')
 
 
     def _translate_handler(self, handler):
@@ -785,11 +822,11 @@ class ASTTranslator:
     def _translate_listcomp(self, generators, elt):
         if isinstance(generators[0].target, ast.Name):
             sketchup, env = self._translate_iter(generators[0].target, generators[0].iter)
-        
+
         self.type_env = self.type_env.child_env(env)
-        
+
         old_function_name, self.function_name = self.function_name, 'list comprehension'
-        
+
         sketchup['type'] = 'standard_iterable_call' + sketchup['type']
 
         if not generators[0].ifs:
@@ -802,7 +839,7 @@ class ASTTranslator:
 
             sketchup['function'] = 'filter_map'
             sketchup['test'] = [test_node]
-            
+
         elt_node = self._translate_node(elt)
 
         self.function_name = old_function_name
@@ -820,13 +857,13 @@ class ASTTranslator:
             elif k.func.id == 'range':
                 if not isinstance(target, ast.Tuple) or len(target.elts) != 2:
                     raise PseudoPythonTypeCheckError('range expected two indices')
-                
+
                 if not k.args or len(k.args) > 3:
-                    raise PseudoPythonTypeCheckError('range expected 1 to 3 args not %d' % len(k.args))                        
+                    raise PseudoPythonTypeCheckError('range expected 1 to 3 args not %d' % len(k.args))
                 return self._translate_range(target.elts, k.args)
             elif k.func.id == 'zip':
                 if len(k.args) < 2 or not isinstance(target, ast.Tuple) or len(k.args) != len(target.elts):
-                    raise PseudoPythonTypeCheckError('zip expected 2 or more args and the same number of indices not %d' % len(k.args))                    
+                    raise PseudoPythonTypeCheckError('zip expected 2 or more args and the same number of indices not %d' % len(k.args))
                 return self._translate_zip(target.elts, k.args)
 
         sequence_node = self._translate_node(k)
@@ -872,12 +909,12 @@ class ASTTranslator:
         return {
             'type': '',
             'sequences': {'type': 'for_sequence_with_' + q, 'sequence': sequence_node},
-            'iterators': {'type': 'for_iterator_with_' + q, 
+            'iterators': {'type': 'for_iterator_with_' + q,
                 k: {
                     'type': 'local',
                     'pseudo_type': 'Int',
                     'name': targets[0].id
-                }, 
+                },
                 v: {
                     'type': 'local',
                     'pseudo_type': iterator_type,
@@ -896,7 +933,7 @@ class ASTTranslator:
         for label, r in [('start', start), ('end', end), ('step', step)]:
             if r['pseudo_type'] != 'Int':
                 raise PseudoPythonTypeCheckError('expected int for range %s index' % label)
-        
+
         if not isinstance(targets[0], ast.Name):
             raise PseudoPythonTypeCheckError('index is not a name %s' % type(targets[0]).__name__)
 
@@ -964,7 +1001,7 @@ class ASTTranslator:
         for label, value in env.items():
             if self.type_env[label]:
                 raise PseudoPythonTypeCheckError("pseudo-python forbirds %s shadowing a variable in for" % label)
-            self.type_env[label] = value                
+            self.type_env[label] = value
         self.in_for = True
         sketchup['block'] = [self._translate_node(z) for z in body]
         sketchup['type'] = 'for' + sketchup['type'] + '_statement'
@@ -1028,7 +1065,7 @@ class ASTTranslator:
                 else:
                     raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
 
-            for f, t in zip(from_[1:-1], to[1:-1]):                
+            for f, t in zip(from_[1:-1], to[1:-1]):
                 self._compatible_types(f, t, err)
 
             return to

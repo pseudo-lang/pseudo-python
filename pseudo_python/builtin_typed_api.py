@@ -108,7 +108,7 @@ def pow_(l, r):
     elif l == 'Int' and r == 'Int':
         return [l, r, 'Int']
     raise PseudoPythonTypeCheckError("wrong types for **: %s and %s" % (serialize_type(l), serialize_type(r)))
-    
+
 # for template types as list, dict @t is the type of list arg and @k, @v of dict args
 TYPED_API = {
     # methods
@@ -144,7 +144,12 @@ TYPED_API = {
         'keys':       ['List', '@k'],
         'values':     ['List', '@v']
     },
-
+    'String': {
+        'find':       ['String', 'Int'],
+        'ljust':      ['Int', 'String', 'String'],
+        'join':       [['List', 'String'], 'String'],
+        'split':      ['String', ['List', 'String']]
+    },
     'Set': {
         '|':           [['Set', '@t'], ['Set', '@t']],
         'add':         ['@t', 'Void'],
