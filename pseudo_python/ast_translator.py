@@ -94,7 +94,8 @@ class ASTTranslator:
                                for a
                                in self._attrs[definition[1]] if not self._attr_index[definition[1]][a][0]], 'methods': [], 'constructor': None}
                 for method in definition[3]:
-                    m = self._definition_index[definition[1][method]]
+                    # print(definition[1], method, self._definition_index)
+                    m = self._definition_index[definition[1]][method]
                     if not isinstance(m, dict):
                         raise PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s#%s" % (definition[1], method))
 
@@ -159,13 +160,14 @@ class ASTTranslator:
 
                 self._definition_index[n.name] = {}
                 self._attrs[n.name] = []
-
+                self._attr_index[n.name] = {}
+                self.type_env[n.name] = {}
 
                 for y, m in enumerate(n.body):
                     if isinstance(m, ast.FunctionDef):
                         if not m.args.args or m.args.args[0].arg != 'self':
                             raise PseudoPythonNotTranslatableError('only methods with a self arguments are supported: %s#%s' % (n.name, m.name))
-                        self.definitions[-1][2].append(m.name)
+                        self.definitions[-1][3].append(m.name)
                         self._definition_index[n.name][m.name] = m
                         self.type_env.top[n.name][m.name] = ['Function'] + ([None] * (len(m.args.args) - 1)) + [None]
                     else:
@@ -288,7 +290,7 @@ class ASTTranslator:
 
         # check or save with the params
         # translate this function and then the pure functions in class
-        class_types = self.type_env.top.get(func_node['name'], None)
+        class_types = self.type_env.top.values.get(name, None)
         if class_types is None:
             raise PseudoPythonTypeCheckError("%s doesnt't exist" % name)
         init = class_types.get('__init__')
@@ -296,13 +298,19 @@ class ASTTranslator:
             raise PseudoPythonTypeCheckError('constructor of %s didn\'t expect %d arguments' % (name, len(params)))
 
         if init:
-            self._translate_function(self._definition_index[name]['__init__'], name, {'pseudo_type': name}, '__init__', [p['pseudo_type'] for p in params])
+            self._definition_index[name]['__init__'] = self._translate_function(self._definition_index[name]['__init__'], name, {'pseudo_type': name}, '__init__', [p['pseudo_type'] for p in params])
             init[-1] = name
 
         for label, m in self._definition_index[name].items():
             if len(self.type_env.top[name][label]) == 2:
-                self._translate_function(m, name, {'pseudo_type': name}, label, [])
+                self._definition_index[name][label] = self._translate_function(m, name, {'pseudo_type': name}, label, [])
 
+        return {
+            'type': 'new_instance',
+            'class': {'type': 'typename', 'name': name},
+            'params': params,
+            'pseudo_type': name
+        }
 
     def _translate_real_method_call(self, node_type, z, receiver, message, params):
         c = self.type_env.top[z]
@@ -359,8 +367,8 @@ class ASTTranslator:
 
         node_args = node.args.args if z == 'functions' else node.args.args[1:]
 
-        if len(node.args.args) != len(args):
-            raise PseudoPythonTypeCheckError('%s expecting %d args' % (node.name, len(node.args.args)))
+        if len(node_args) != len(args):
+            raise PseudoPythonTypeCheckError('%s expecting %d args' % (node.name, len(node_args)))
 
         # 0-arg functions are inferred only in the beginning
 
@@ -688,7 +696,7 @@ class ASTTranslator:
                 pseudo_type = value_node['pseudo_type'][1]
             elif value_general_type == 'Tuple':
                 if z['type'] != 'int':
-                    raise PseudoPythonTypeCheckError('pseudo-python can support only literal int indexes of a heterogenous tuple ' +
+                    raise PseudoPythonTypeCheckError('pseudo-python can support only literal int indices of a heterogenous tuple ' +
                                                      'because otherwise the index type is not predictable %s %s ' % (serialize_type(value_node['pseudo_type']), z['type']))
 
                 elif z['value'] > len(value_node['pseudo_type']) - 2:
@@ -751,18 +759,18 @@ class ASTTranslator:
         if isinstance(k, ast.Call) and isinstance(k.func, ast.Name):
             if k.func.id == 'enumerate':
                 if len(k.args) != 1 or not isinstance(target, ast.Tuple) or len(target.elts) != 2:
-                    raise PseudoPythonTypeCheckError('enumerate expected one arg not %d and two indexes' % len(k.args))
+                    raise PseudoPythonTypeCheckError('enumerate expected one arg not %d and two indices' % len(k.args))
                 return self._translate_enumerate(target.elts, k.args[0])
             elif k.func.id == 'range':
                 if not isinstance(target, ast.Tuple) or len(target.elts) != 2:
-                    raise PseudoPythonTypeCheckError('range expected two indexes')
+                    raise PseudoPythonTypeCheckError('range expected two indices')
                 
                 if not k.args or len(k.args) > 3:
                     raise PseudoPythonTypeCheckError('range expected 1 to 3 args not %d' % len(k.args))                        
                 return self._translate_range(target.elts, k.args)
             elif k.func.id == 'zip':
                 if len(k.args) < 2 or not isinstance(target, ast.Tuple) or len(k.args) != len(target.elts):
-                    raise PseudoPythonTypeCheckError('zip expected 2 or more args and the same number of indexes not %d' % len(k.args))                    
+                    raise PseudoPythonTypeCheckError('zip expected 2 or more args and the same number of indices not %d' % len(k.args))                    
                 return self._translate_zip(target.elts, k.args)
 
         sequence_node = self._translate_node(k)

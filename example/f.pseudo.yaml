@@ -1,114 +1,36 @@
 constants: []
 definitions:
-- block:
-  - block:
-    - pseudo_type: Int
-      type: implicit_return
-      value: {pseudo_type: Int, type: int, value: 1}
-    otherwise:
-      block:
-      - pseudo_type: Int
-        type: implicit_return
-        value:
-          left:
-            args:
-            - left: {name: n, pseudo_type: Int, type: local}
-              op: '-'
-              pseudo_type: Int
-              right: {pseudo_type: Int, type: int, value: 1}
-              type: binary_op
-            function:
-              name: fib
-              pseudo_type: [Function, Int, Int]
-              type: local
-            pseudo_type: Int
-            type: call
-          op: '*'
-          pseudo_type: Int
-          right:
-            args:
-            - left: {name: n, pseudo_type: Int, type: local}
-              op: '-'
-              pseudo_type: Int
-              right: {pseudo_type: Int, type: int, value: 2}
-              type: binary_op
-            function:
-              name: fib
-              pseudo_type: [Function, Int, Int]
-              type: local
-            pseudo_type: Int
-            type: call
-          type: binary_op
+- attrs: []
+  base: null
+  constructor:
+    block:
+    - attr:
+        attr: a
+        object: {name: self, pseudo_type: Shape, type: local}
+        pseudo_type: Int
+        type: attr
       pseudo_type: Void
-      type: else_statement
-    pseudo_type: Void
-    test:
-      left: {name: n, pseudo_type: Int, type: local}
-      op: <
-      pseudo_type: Boolean
-      right: {pseudo_type: Int, type: int, value: 2}
-      type: binary_op
-    type: if_statement
-  name: fib
-  params: [n]
-  pseudo_type: [Function, Int, Int]
-  return_type: Int
-  type: function_definition
-- block:
-  - block:
-    - args:
-      - {name: j, pseudo_type: Int, type: local}
-      function: display
-      namespace: io
-      pseudo_type: Void
-      type: standard_call
-    iterators:
-      index: {name: j, pseudo_type: Int, type: local}
-      iterator: {name: k, pseudo_type: Int, type: local}
-      type: for_iterator_with_index
-    pseudo_type: Void
-    sequences:
-      sequence:
-        name: l
-        pseudo_type: [List, Int]
-        type: local
-      type: for_sequence_with_index
-    type: for_statement
-  name: huh
-  params: [l]
-  pseudo_type:
-  - Function
-  - [List, Int]
-  - null
-  return_type: null
-  type: function_definition
+      type: attr_assignment
+      value: {name: a, pseudo_type: Int, type: local}
+    name: __init__
+    params: [a]
+    pseudo_type: [Function, Int, Shape]
+    return_type: null
+    this: {name: Shape, type: typename}
+    type: constructor
+  methods: []
+  name: Shape
+  type: class_definition
 dependencies: []
 main:
-- local: f
+- local: s
   pseudo_type: Void
   type: local_assignment
-  value: {pseudo_type: Int, type: int, value: 4}
-  value_type: Int
-- block:
-  - args:
-    - {pseudo_type: Int, type: int, value: 4}
-    function: {name: fib, type: local}
-    pseudo_type: Int
-    type: call
-  pseudo_type: Void
-  test:
-    left: {name: f, pseudo_type: Int, type: local}
-    op: ==
-    pseudo_type: Boolean
-    right: {pseudo_type: Int, type: int, value: 2}
-    type: binary_op
-  type: while_statement
-- args:
-  - elements:
-    - {pseudo_type: Int, type: int, value: 2}
-    pseudo_type: [List, Int]
-    type: list
-  function: {name: huh, type: local}
-  pseudo_type: null
-  type: call
+  value:
+    class: {name: Shape, type: typename}
+    params:
+    - {pseudo_type: Int, type: int, value: 0}
+    pseudo_type: Shape
+    type: new_instance
+  value_type: Shape
 type: module
