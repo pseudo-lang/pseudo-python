@@ -92,7 +92,7 @@ class ASTTranslator:
                 c = {'type': 'class_definition', 'name': definition[1], 'base': definition[2],
                      'attrs': [self._attr_index[definition[1]][a][0]
                                for a
-                               in self._attrs[definition[1]] if not self._attr_index[definition[1]][a][0]], 'methods': [], 'constructor': None}
+                               in self._attrs[definition[1]] if not self._attr_index[definition[1]][a][1]], 'methods': [], 'constructor': None}
                 for method in definition[3]:
                     # print(definition[1], method, self._definition_index)
                     m = self._definition_index[definition[1]][method]
@@ -145,23 +145,23 @@ class ASTTranslator:
                 self.assert_translatable('class', decorator_list=([], n.decorator_list))
                 self._hierarchy[n.name] = (None, set())
                 if n.bases:
-                    if len(n.bases) != 0 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
-                        raise PseudoPythonNotTranslatableError('only single inheritance from an already defined class is supported class %s' % n.name)
+                    if len(n.bases) != 1 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
+                        raise PseudoPythonNotTranslatableError('only single inheritance from an already defined class is supported ? class %s' % n.name)
 
                     base = n.bases[0].id
-                    self.type_env.top[n.name] = self.type_env.to[base][:]
-                    self._attr_index[n.name][l] = {l: [t[0], True] for l, t in self._attr_index[base].items()}
+                    self.type_env.top[n.name] = {l: t for l, t in self.type_env.top[base].items()}
+                    self._attr_index[n.name] = {l: [t[0], True] for l, t in self._attr_index[base].items()}
                     self._hierarchy[n.name] = (base, set())
                     self._hierarchy[base][1].add(n.name)
                 else:
                     base = None
+                    self._attr_index[n.name] = {}
+                    self.type_env[n.name] = {}
 
                 self.definitions.append(('class', n.name, base, []))
 
                 self._definition_index[n.name] = {}
                 self._attrs[n.name] = []
-                self._attr_index[n.name] = {}
-                self.type_env[n.name] = {}
 
                 for y, m in enumerate(n.body):
                     if isinstance(m, ast.FunctionDef):
@@ -276,7 +276,6 @@ class ASTTranslator:
             else:
                 if not isinstance(func_node['pseudo_type'], list) or func_node['pseudo_type'][0] != 'Function':
                     # print(func_node['name'] if 'name' in func_node else func_node['type'])
-                    print(serialize_type(func_node['pseudo_type']))
                     raise PseudoPythonTypeCheckError("trying to call value" % 
                         ((func_node['name'] if 'name' in func_node else func_node['type']) + ' ' + serialize_type(func_node['pseudo_type'])))
 
@@ -670,8 +669,9 @@ class ASTTranslator:
         accidentaly_homogeneous = True
         for j, element in enumerate(elements[1:]):
             element_nodes.append(self._translate_node(element))
+            print(self._hierarchy)
             if homogeneous:
-                element_type = self._compatible_types(element_type, element_nodes[-1]['pseudo_type'], "can't use different types in a %s" % kind)
+                element_type = self._compatible_types(element_nodes[-1]['pseudo_type'], element_type, "can't use different types in a %s" % kind)
             else:
                 element_types.append(element_nodes[-1]['pseudo_type'])
                 if accidentaly_homogeneous:
@@ -948,12 +948,20 @@ class ASTTranslator:
                 return to
 
             elif from_ in self._hierarchy:
-                if to not in self._hierarchy or from_ not in self._hierarchy[to][1]:
-                    if silent:
-                        return False
-                    else:
-                        raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
-                return to
+                if to in self._hierarchy:
+                    if to in self._hierarchy[from_][1]:
+                        return from_
+
+                    base = to
+                    while base:
+                        if from_ in self._hierarchy[base][1]:
+                            return base
+                        base = self._hierarchy[base][0]
+
+                if silent:
+                    return False
+                else:
+                    raise PseudoPythonTypeCheckError(err + ' from %s to %s' % (serialize_type(from_), serialize_type(to)))
 
             elif from_ == 'Int' and to == 'Float':
                 return 'Float'

@@ -102,6 +102,13 @@ def div(l, r):
         return [l, r, 'Int']
     raise PseudoPythonTypeCheckError("wrong types for /: %s and %s" % (serialize_type(l), serialize_type(r)))
 
+def pow_(l, r):
+    if l == 'Float' and r in ['Float', 'Int'] or r == 'Float' and l in ['Float', 'Int']:
+        return [l, r, 'Float']
+    elif l == 'Int' and r == 'Int':
+        return [l, r, 'Int']
+    raise PseudoPythonTypeCheckError("wrong types for **: %s and %s" % (serialize_type(l), serialize_type(r)))
+    
 # for template types as list, dict @t is the type of list arg and @k, @v of dict args
 TYPED_API = {
     # methods
@@ -122,7 +129,8 @@ TYPED_API = {
         '+': add,
         '-': sub,
         '*': mul,
-        '/': div
+        '/': div,
+        '**': pow_
     },
     
     'List': {
