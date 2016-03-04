@@ -1,8 +1,9 @@
 import ast
 import pseudo_python.env
-from pseudo_python.builtin_typed_api import TYPED_API, serialize_type
-from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError, cant_infer_error, translation_error
+from pseudo_python.builtin_typed_api import TYPED_API
+from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError, cant_infer_error, translation_error, type_check_error
 from pseudo_python.api_translator import Standard, StandardCall, StandardMethodCall, FUNCTION_API, METHOD_API, OPERATOR_API
+from pseudo_python.helpers import serialize_type
 
 BUILTIN_TYPES = {
     'int':      'Int',
@@ -131,7 +132,7 @@ class ASTTranslator:
                     raise translation_error('imports can be only on top', (n.lineno, n.col_offset), self.lines[n.lineno])
 
                 self._imports.add(n.names[0].name)
-                self.type_env.top[n.names[0].name] = 'library'
+                self.type_env.top['_%s' % n.names[0].name], self.type_env.top[n.names[0].name] = self.type_env.top[n.names[0].name], 'library'
 
             elif isinstance(n, ast.FunctionDef):
                 self.definitions.append(('function', n.name))
@@ -238,7 +239,7 @@ class ASTTranslator:
                     wrong='K = [2, x]')
 
             fields = {field: getattr(node, field) for field in node._fields}
-            return getattr(self, '_translate_%s' % type(node).__name__.lower())(**fields)
+            return getattr(self, '_translate_%s' % type(node).__name__.lower())(location=(node.lineno, node.col_offset), **fields)
         elif isinstance(node, list):
             return [self._translate_node(n) for n in node]
         elif isinstance(node, dict):
@@ -246,28 +247,17 @@ class ASTTranslator:
         else:
             return node
 
-    def _translate_module(self, body):
-        ordered = []
-        main = []
-
-        for c in body:
-            if isinstance(c, (ast.FunctionDef, ast.ClassDef)):
-                ordered.append(c)
-            else:
-                main.append(c)
-        main_node = self._translate_main(main)
-        ordered_nodes = [self._translate_node(node) for node in ordered[:-1]][:-1]
-        return {'type': 'module', 'code': ordered_nodes, 'main': main}
-
-
-    def _translate_num(self, n):
+    def _translate_num(self, n, location):
         type = 'int' if isinstance(n, int) else 'float'
         return {'type': type, 'value': n, 'pseudo_type': type.title()}
 
-    def _translate_name(self, id, ctx):
+    def _translate_name(self, id, ctx, location):
         if id[0].isupper():
             if id not in self.type_env.top.values:
-                raise PseudoPythonTypeCheckError('%s is not defined' % id)
+                raise type_check_error(
+                    'name %s is not defined' % id,
+                    location,
+                    self.lines[location[0]])
             id_type = self.type_env.top[id]
             if isinstance(id_type, dict): # class
                 id_type = id
@@ -275,8 +265,11 @@ class ASTTranslator:
         else:
             id_type = self.type_env[id]
             if id_type is None:
-                raise PseudoPythonTypeCheckError('%s is not defined' % id)
-
+                raise type_check_error(
+                    '%s is not defined' % id,
+                    location,
+                    self.lines[location[0]])
+                
             # if isinstance(id_type, list):
             # id_type = tuple(['Function'] + id_type)
             if id == 'self':
@@ -284,57 +277,66 @@ class ASTTranslator:
             else:
                 return {'type': 'local', 'name': id, 'pseudo_type': id_type}
 
-    def _translate_call(self, func, args, keywords, starargs, kwargs):
+    def _translate_call(self, func, args, keywords, starargs, kwargs, location):
         self.assert_translatable('call', keywords=([], keywords), starargs=(None, starargs), kwargs=(None, kwargs))
         arg_nodes = self._translate_node(args)
 
         if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
-            return self._translate_builtin_call('global', func.id, arg_nodes)
+            return self._translate_builtin_call('global', func.id, arg_nodes, location)
 
         func_node = self._translate_node(func)
 
         print('CALL CALL ', func_node, arg_nodes[:1])
         if func_node['type'] == 'attr':
             if func_node['object']['pseudo_type'] == 'library': # math.log
-                return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes)
+                return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes, location)
             elif self.current_class and self.current_class != 'functions' and isinstance(func.value, ast.Name) and func.value.id == 'self':
                 node_type = 'this_method_call'
             elif self.current_class and self.current_class != 'functions' and func_node['object']['pseudo_type'] == 'instance_variable':
                 node_type = 'this_method_call'                
             elif self._general_type(func_node['object']['pseudo_type']) in PSEUDON_BUILTIN_TYPES: # [2].append
-                return self._translate_builtin_method_call(self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
+                return self._translate_builtin_method_call(self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes, location)
             else:
                 node_type = 'method_call'
 
-            return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes)
+            return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes, location)
 
         else:
             if (func_node['type'] == 'local' or func_node['type'] == 'this') and func_node['pseudo_type'][-1] is None:
-                return self._translate_real_method_call('call', 'functions', None, 'self' if func_node['type'] == 'this' else func_node['name'], arg_nodes)
+                return self._translate_real_method_call('call', 'functions', None, 'self' if func_node['type'] == 'this' else func_node['name'], arg_nodes, location)
             elif func_node['type'] == 'typename':
-                return self._translate_init(func_node['name'], arg_nodes)
+                return self._translate_init(func_node['name'], arg_nodes, location)
             elif func_node['type'] == 'library_function':
-                return self._translate_builtin_call(func_node['library'], func_node['function'], arg_nodes)
+                return self._translate_builtin_call(func_node['library'], func_node['function'], arg_nodes, location)
             else:
                 if self._general_type(func_node['pseudo_type']) != 'Function':
-                    raise PseudoPythonTypeCheckError("trying to call %s with %s " %
-                        ((func_node['name'] if 'name' in func_node else func_node['type']),serialize_type(func_node['pseudo_type'])))
+                    raise translation_error(
+                        'only Function[..] type is callable',
+                        location,
+                        self.lines[location[0]],
+                        used_type=func_node['pseudo_type'])
 
                 self._real_type_check(func_node['pseudo_type'], [arg_node['pseudo_type'] for arg_node in arg_nodes], (func_node['name'] if 'name' in func_node else func_node['type']))
                 z = func_node['pseudo_type'][-1]
 
                 return {'type': 'call', 'function': func_node, 'args': arg_nodes, 'pseudo_type': z}
 
-    def _translate_init(self, name, params):
+    def _translate_init(self, name, params, location):
 
         # check or save with the params
         # translate this function and then the pure functions in class
         class_types = self.type_env.top.values.get(name, None)
         if class_types is None:
-            raise PseudoPythonTypeCheckError("%s doesnt't exist" % name)
+            raise type_check_error(
+                '%s is undefined' % name,
+                location,
+                self.lines[location[0]])
         init = class_types.get('__init__')
         if init is None and params:
-            raise PseudoPythonTypeCheckError('constructor of %s didn\'t expect %d arguments' % (name, len(params)))
+            raise type_check_error(
+                'constructor of %s didn\'t expect %d arguments' % (name, len(params)),
+                location,
+                self.lines[location[0]])                
 
         if init:
             self._definition_index[name]['__init__'] = self._translate_function(self._definition_index[name]['__init__'], name, {'pseudo_type': name}, '__init__', [p['pseudo_type'] for p in params])
@@ -369,12 +371,32 @@ class ASTTranslator:
                 result['receiver'] = receiver
         return result
 
-    def _translate_builtin_call(self, namespace, function, args):
+    def _translate_builtin_call(self, namespace, function, args, location):
         if namespace != 'global' and namespace not in self._imports:
-            raise PseudoPythonTypeCheckError('module %s not imported: impossible to use %s' % (namespace, function))
-        api = FUNCTION_API.get(namespace, {}).get(function)
+            raise type_check_error(
+                'module %s not imported: impossible to use %s' % (namespace, function),
+                location, self.lines[location[0]],
+                suggestions='a tip: pseudo-python currently supports only import, no import as or from..import')                
+        if not namespace in FUNCTION_API:
+            raise translation_error(
+                "pseudo-python doesn't support %s" % namespace,
+                location, self.lines[location[0]],
+                suggestions='pseudo-python currently supports methods from\n  %s' % ' '.join(
+                  k for k in FUNCTION_API if k != 'global'))
+        api = FUNCTION_API[namespace].get(function)
         if not api:
-            raise PseudoPythonNotTranslatableError('pseudo doesn\'t support %s%s' % (namespace, function))
+            raise translation_error(
+                'pseudo-python doesn\'t support %s %s' % (namespace, function),
+                location, self.lines[location[0]],
+                suggestions='pseudo-python currently supports those %s functions\n  %s' % (
+                    namespace, '\n'.join(
+                        '  %s %s -> %s' % (
+                            name,
+                            ' '.join(serialize_type(arg) for arg in t[:-1]), 
+                            serialize_type(t[-1]))
+                        for name, t in TYPED_API['_%s' % namespace].items()).strip()))
+
+                            
 
         if not isinstance(api, dict):
             return api.expand(args)
@@ -459,10 +481,10 @@ class ASTTranslator:
                 q['is_public'] = name[0] != '_'
         return q
 
-    def _translate_expr(self, value):
+    def _translate_expr(self, value, location):
         return self._translate_node(value)
 
-    def _translate_return(self, value):
+    def _translate_return(self, value, location):
         value_node = self._translate_node(value)
         whiplash = self.type_env.top[self.current_class][self.function_name]
         if whiplash[-1] and whiplash[-1] != value_node['pseudo_type']:
@@ -476,7 +498,7 @@ class ASTTranslator:
             'pseudo_type': value_node['pseudo_type']
         }
 
-    def _translate_binop(self, op, left, right):
+    def _translate_binop(self, op, left, right, location):
         op = PSEUDO_OPS[type(op)]
         left_node, right_node = self._translate_node(left), self._translate_node(right)
         binop_type = TYPED_API['operators'][op](left_node['pseudo_type'], right_node['pseudo_type'])[-1]
@@ -504,7 +526,7 @@ class ASTTranslator:
                 'pseudo_type': binop_type
             }
 
-    def _translate_compare(self, left, ops, comparators):
+    def _translate_compare(self, left, ops, comparators, location):
         op = PSEUDO_OPS[type(ops[0])]
         right_node = self._translate_node(comparators[0])
         left_node = self._translate_node(left)
@@ -539,7 +561,7 @@ class ASTTranslator:
            l != r or l not in COMPARABLE_TYPES:
             raise PseudoPythonTypeCheckError("%s not comparable with %s" % (serialize_type(l), serialize_type(r)))
 
-    def _translate_attribute(self, value, attr, ctx):
+    def _translate_attribute(self, value, attr, ctx, location):
         value_node = self._translate_node(value)
         if not isinstance(value_node['pseudo_type'], str):
             raise PseudoPythonTypeCheckError("you can't access attr of %s, only of normal objects or modules" % (serialize_type(value_node['pseudo_type'])))
@@ -584,7 +606,7 @@ class ASTTranslator:
                     'pseudo_type': attr_type
                 }
 
-    def _translate_assign(self, targets, value):
+    def _translate_assign(self, targets, value, location):
         if isinstance(value, ast.AST):
             value_node = self._translate_node(value)
         else:
@@ -657,10 +679,10 @@ class ASTTranslator:
                 'value_type': value_node['pseudo_type']
             }
     
-    def _translate_augassign(self, target, op, value):
+    def _translate_augassign(self, target, op, value, location):
         return self._translate_assign([target], ast.BinOp(target, op, value))
 
-    def _translate_if(self, test, orelse, body, base=True):
+    def _translate_if(self, test, orelse, body, location, base=True):
         test_node = self._testable(self._translate_node(test))
         block = [self._translate_node(child) for child in body]
         if isinstance(orelse, ast.If):
@@ -682,7 +704,7 @@ class ASTTranslator:
             'otherwise': otherwise
         }
 
-    def _translate_while(self, body, test, orelse):
+    def _translate_while(self, body, test, orelse, location):
         self.assert_translatable('while', orelse=([], orelse))
         test_node = self._testable(self._translate_node(test))
         return {
@@ -730,7 +752,7 @@ class ASTTranslator:
         else:
             return test_node
 
-    def _translate_list(self, elts, ctx):
+    def _translate_list(self, elts, ctx, location):
         if not elts:
             return {'type': 'list', 'elements': [], 'pseudo_type': ['List', None]}
 
@@ -742,7 +764,7 @@ class ASTTranslator:
             'elements': element_nodes
         }
 
-    def _translate_dict(self, keys, values):
+    def _translate_dict(self, keys, values, location):
         if not keys:
             return {'type': 'dictionary', 'pairs': [], 'pseudo_type': ['Dictionary', None, None]}
 
@@ -759,7 +781,7 @@ class ASTTranslator:
             'pairs': pairs
         }
 
-    def _translate_set(self, elts):
+    def _translate_set(self, elts, location):
         element_nodes, element_type = self._translate_elements(elts, 'set')
 
         return {
@@ -768,7 +790,7 @@ class ASTTranslator:
             'elements': element_nodes
         }
 
-    def _translate_tuple(self, elts, ctx):
+    def _translate_tuple(self, elts, ctx, location):
         element_nodes, accidentaly_homogeneous, element_type = self._translate_elements(elts, 'tuple', homogeneous=False)
 
         return {
@@ -796,7 +818,7 @@ class ASTTranslator:
 
         return (element_nodes, element_type) if homogeneous else (element_nodes, accidentaly_homogeneous, element_type if accidentaly_homogeneous else element_types)
 
-    def _translate_subscript(self, value, slice, ctx):
+    def _translate_subscript(self, value, slice, ctx, location):
         value_node = self._translate_node(value)
         value_general_type = self._general_type(value_node['pseudo_type'])
         if value_general_type not in INDEXABLE_TYPES:
@@ -837,10 +859,10 @@ class ASTTranslator:
         else:
             z = self._translate_node(slice)
 
-    def _translate_str(self, s):
+    def _translate_str(self, s, location):
         return {'type': 'string', 'value': s.replace('\n', '\\n'), 'pseudo_type': 'String'}
 
-    def _translate_try(self, orelse, finalbody, body, handlers):
+    def _translate_try(self, orelse, finalbody, body, handlers, location):
         self.assert_translatable('try', else_=([], orelse), finally_=([], finalbody))
 
         return {
@@ -850,7 +872,7 @@ class ASTTranslator:
             'handlers': [self._translate_handler(handler) for handler in handlers]
         }
 
-    def _translate_raise(self, exc, cause):
+    def _translate_raise(self, exc, cause, location):
         self.assert_translatable('raise', cause=(None, cause))
         if not isinstance(exc.func, ast.Name) or exc.func.id not in self._exceptions:
             raise PseudoPythonTypeCheckError('pseudo-python can raise only Exception or custom exceptions: %s ' % ast.dump(exc.func))
@@ -863,7 +885,7 @@ class ASTTranslator:
         }
 
 
-    def _translate_with(self, items, body):
+    def _translate_with(self, items, body, location):
         if len(items) != 1 or not isinstance(items[0].context_expr, ast.Call) or not isinstance(items[0].context_expr.func, ast.Name) or items[0].context_expr.func.id != 'open':
             print(not isinstance(items[0].context_expr, ast.Call))
             raise PseudoPythonTypeCheckError('pseudo-python supports with only for opening files')
@@ -913,13 +935,13 @@ class ASTTranslator:
             'block': [self._translate_node(z) for z in handler.body]
         }
 
-    def _translate_nameconstant(self, value):
+    def _translate_nameconstant(self, value, location):
         if value == True or value == False:
             return {'type': 'boolean', 'value': value, 'pseudo_type': 'Boolean'}
         elif value is None:
             return {'type': 'null', 'pseudo_type': 'Void'}
 
-    def _translate_listcomp(self, generators, elt):
+    def _translate_listcomp(self, generators, elt, location):
         if isinstance(generators[0].target, ast.Name):
             sketchup, env = self._translate_iter(generators[0].target, generators[0].iter)
 
@@ -1091,7 +1113,7 @@ class ASTTranslator:
             if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 2:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
 
-    def _translate_for(self, iter, target, body, orelse):
+    def _translate_for(self, iter, target, body, orelse, location):
         self.assert_translatable('for', orelse=([], orelse))
         sketchup, env = self._translate_iter(target, iter)
         for label, value in env.items():

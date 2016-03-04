@@ -25,7 +25,7 @@ def z():
     except pseudo_python.errors.PseudoError as e:
         print(colored(e, 'red'))
         if e.suggestions:
-            print(colored(e, 'green'))
+            print(colored(e.suggestions, 'green'))
         if e.right:
             print(colored('\nright:\n%s' % e.right, 'green'))
         if e.wrong:

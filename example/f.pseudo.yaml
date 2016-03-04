@@ -11,4 +11,10 @@ main:
   type: local_assignment
   value: {pseudo_type: Int, type: int, value: 2}
   value_type: Int
+- args:
+  - {pseudo_type: Int, type: int, value: 2}
+  function: sin
+  namespace: math
+  pseudo_type: Float
+  type: standard_call
 type: module

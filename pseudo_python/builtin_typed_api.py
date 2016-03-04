@@ -8,6 +8,7 @@
 # {} Dict
 
 from pseudo_python.errors import PseudoPythonTypeCheckError
+from pseudo_python.helpers import serialize_type
 
 V = '_' # we don't really typecheck or care for a lot of the arg types, so just use this
 _ = ()
@@ -17,7 +18,10 @@ _ = ()
 # that helps us with inherited methods: each one updates the type signature for the whole hierarchy
 
 def builtin_type_check(namespace, function, receiver, args):
-    x = TYPED_API[namespace][function]
+    fs = TYPED_API[namespace]
+    if fs == 'library':
+        fs = TYPED_API['_%s' % namespace]
+    x = fs[function]
     a = namespace + '#' + function if receiver else namespace + ':' + function
     if namespace == 'List' or namespace == 'Set' or namespace == 'Array':
         generics = {'@t': receiver['pseudo_type'][1]}
@@ -42,7 +46,7 @@ def builtin_type_check(namespace, function, receiver, args):
     return s
 
 def arg_check(expected_type, args, a):
-    if expected_type != args['pseudo_type'] and expected_type != 'Any':
+    if expected_type != args['pseudo_type'] and expected_type != 'Any' and not(expected_type == 'Number' and (args['pseudo_type'] == 'Int' or args['pseudo_type'] == 'Float')):
         raise PseudoPythonTypeCheckError('%s expected %s not %s' % (a, serialize_type(expected_type), serialize_type(args['pseudo_type'])))
 
 def simplify(kind, generics):
@@ -55,14 +59,6 @@ def simplify(kind, generics):
             return kind
     else:
         return [simplify(child, generics) for child in kind]
-
-def serialize_type(l):
-    if isinstance(l, str):
-        return l
-    elif isinstance(l, list):
-        return '%s[%s]' % (l[0], ', '.join(map(serialize_type, l[1:])))
-    else:
-        return str(l)
 
 def add(l, r):
     if l == 'Float' and r in ['Float', 'Int']  or r == 'Float' and l in ['Float', 'Int']:
@@ -139,6 +135,12 @@ TYPED_API = {
     'regexp': {
         'compile':      ['String', 'Regexp'],
         'escape':       ['String', 'String']
+    },
+
+    'math': {
+        'tan':          ['Number', 'Float'],
+        'sin':          ['Number', 'Float'],
+        'cos':          ['Number', 'Float']
     },
 
     'operators': {
