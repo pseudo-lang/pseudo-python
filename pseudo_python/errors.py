@@ -14,8 +14,13 @@ class PseudoPythonNotTranslatableError(PseudoError):
 class PseudoPythonTypeCheckError(PseudoError):
     pass
 
-def cant_infer_error(name):
-    return PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s" % name)
+def cant_infer_error(name, line):
+    return PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s:\n%s\n" % (name, line),
+            suggestions='you need to either:\n' +
+                        '    ensure %s is reachable from a call in your top scope\n' % name +
+                        '    e.g. a(..) in top scope, b(..) in a body, %s() in b body\n' % name +
+                        '    or provide type hints (see https://docs.python.org/3/library/typing.html)'
+                        )
 
 def beautiful_error(exception):
     def f(function):

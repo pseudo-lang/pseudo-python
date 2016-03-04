@@ -69,6 +69,8 @@ class ASTTranslator:
         self._attr_index = {}
         self._attrs = {}
         self._imports = set()
+        self.current_class = None
+        self.function_name = 'top level'
         self.type_env['functions'] = {}
         self._translate_top_level(self.tree)
         self._translate_pure_functions()
@@ -82,7 +84,7 @@ class ASTTranslator:
         for definition in self.definitions:
             if definition[0] == 'function':
                 if not isinstance(self._definition_index['functions'][definition[1]], dict):
-                    raise cant_infer_error(definition[1])
+                    raise cant_infer_error(definition[1], self.lines[self._definition_index['functions'][definition[1]].lineno])
 
                 definitions.append(self._definition_index['functions'][definition[1]])
             elif definition[0] == 'class':  #inherited
@@ -93,7 +95,7 @@ class ASTTranslator:
                 for method in definition[3]:
                     m = self._definition_index[definition[1]][method]
                     if not isinstance(m, dict):
-                        raise cant_infer_error('%s#%s' % (definition[1], method))
+                        raise cant_infer_error('%s#%s' % (definition[1], method), self.lines[m.lineno])
 
                     if method == '__init__':
                         c['constructor'] = m
@@ -1003,7 +1005,7 @@ class ASTTranslator:
                     'function': 'read_file',
                     'args': [arg_node],
                     'pseudo_type': 'String'
-                })
+                }, location=(body[0].lineno, body[0].col_offset))
             elif arg_node['pseudo_type'] == 'String' and isinstance(body[0], ast.Call) and isinstance(body[0].func, ast.Attribute) and isinstance(body[0].func.value, ast.Name) and body[0].func.value.id == optional_vars.id and body[0].func.attr == 'write':
                 z == self._translate_node(body[0].func.args[0], in_call=True)
                 return {

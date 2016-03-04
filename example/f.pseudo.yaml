@@ -1,31 +1,22 @@
 constants: []
-definitions: []
+definitions:
+- block:
+  - pseudo_type: Int
+    type: implicit_return
+    value: {name: s, pseudo_type: Int, type: local}
+  name: f
+  params: [s]
+  pseudo_type: [Function, Int, Int]
+  return_type: Int
+  type: function_definition
 dependencies: []
 main:
-- local: l
-  pseudo_type: Void
-  type: local_assignment
-  value:
-    elements:
-    - {pseudo_type: Int, type: int, value: 2}
-    pseudo_type: [List, Int]
-    type: list
-  value_type: [List, Int]
 - args:
   - {pseudo_type: Int, type: int, value: 2}
-  - args: []
-    message: slice_
-    pseudo_type: [List, Int]
-    receiver:
-      name: l
-      pseudo_type: [List, Int]
-      type: local
-    type: standard_method_call
-  message: set_slice_to
-  pseudo_type: Void
-  receiver:
-    name: l
-    pseudo_type: [List, Int]
+  function:
+    name: f
+    pseudo_type: [Function, Int, Int]
     type: local
-  type: standard_method_call
+  pseudo_type: Int
+  type: call
 type: module
