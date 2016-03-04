@@ -673,8 +673,13 @@ class ASTTranslator:
                 a = value_node['pseudo_type']
             self.type_env[name] = a
             return {
-                'type': 'local_assignment',
-                'local': name,
+                'type': 'assignment',
+                'target': {
+                    'type': 'local',
+                    'name': name,
+                    'pseudo_type': value_node['pseudo_type']
+                },
+                'assignment_type': 'local'
                 'value': value_node,
                 'pseudo_type': 'Void',
                 'value_type': value_node['pseudo_type']
@@ -705,15 +710,19 @@ class ASTTranslator:
 
             if z['type'] == 'this':
                 return {
-                    'type': 'instance_assignment',
-                    'name': targets[0].attr,
+                    'type': 'assignment',
+                    'target': {
+                        'type': 'instance_variable',
+                        'name': targets[0].attr,
+                        'pseudo_type': value_node['pseudo_type']
+                    },
                     'value': value_node,
                     'pseudo_type': 'Void',
                     'value_type': value_node['pseudo_type']
                 }
             return {
-                'type': 'attr_assignment',
-                'attr': {
+                'type': 'assignment',
+                'target': {
                     'type': 'attr',
                     'object': z,
                     'attr': targets[0].attr,
@@ -727,8 +736,9 @@ class ASTTranslator:
             z = self._translate_node(targets[0])
             if z['type'] == 'index':
                 return {
-                    'type': 'index_assignment',
-                    'sequence': z['sequence'],
+                    'type': 'assignment',
+                    'target': z,
+                    'assignment_type': 'index',
                     'value': value_node,
                     'pseudo_type': 'Void',
                     'value_type': value_node['pseudo_type']
