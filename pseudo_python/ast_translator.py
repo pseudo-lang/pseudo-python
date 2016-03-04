@@ -239,7 +239,11 @@ class ASTTranslator:
                     wrong='K = [2, x]')
 
             fields = {field: getattr(node, field) for field in node._fields}
-            fields['location'] = node.lineno, node.col_offset
+            l = getattr(node, 'lineno', None)
+            if l:
+                fields['location'] = l, node.col_offset
+            else:
+                fields['location'] = None
             if isinstance(node, ast.Attribute):
                 fields['in_call'] = in_call
             return getattr(self, '_translate_%s' % type(node).__name__.lower())(**fields)
@@ -581,7 +585,14 @@ class ASTTranslator:
                 }
             return result
 
-    def _confirm_comparable(self, l, r):
+    def _confirm_index(self, index_type, expected, location, window):
+        if index_type != 'Int':
+            raise type_check_error(
+                'expected Int for %s' % window,
+                location, self.lines[location[0]],
+                wrong_type=index_type)
+
+    def _confirm_comparable(self, l, r, location):
         if isinstance(l, list) or isinstance(r, list) or\
            l != r or l not in COMPARABLE_TYPES:
             raise type_check_error(
@@ -700,14 +711,6 @@ class ASTTranslator:
                     'pseudo_type': 'Void',
                     'value_type': value_node['pseudo_type']
                 }
-            elif z['type'] == 'index':
-                return {
-                    'type': 'index_assignment',
-                    'sequence': z['sequence'],
-                    'value': value_node,
-                    'pseudo_type': 'Void',
-                    'value_type': value_node['pseudo_type']
-                }
             return {
                 'type': 'attr_assignment',
                 'attr': {
@@ -720,6 +723,26 @@ class ASTTranslator:
                 'pseudo_type': 'Void',
                 'value_type': value_node['pseudo_type']
             }
+        elif isinstance(targets[0], ast.Subscript):
+            z = self._translate_node(targets[0])
+            if z['type'] == 'index':
+                return {
+                    'type': 'index_assignment',
+                    'sequence': z['sequence'],
+                    'value': value_node,
+                    'pseudo_type': 'Void',
+                    'value_type': value_node['pseudo_type']
+                }
+            elif z['type'] == 'standard_method_call': # slice
+                if z['pseudo_type'] != value_node['pseudo_type']:
+                    raise type_check_error(
+                        'expected %s' % serialize_type(z['pseudo_type']),
+                        getattr(value, 'location', location), self.lines[location[0]])
+
+                z['message'] = 'set_%s' % z['message']
+                z['args'].append(value_node)
+                z['pseudo_type'] = 'Void'
+                return z
 
     def _translate_augassign(self, target, op, value, location):
         return self._translate_assign([target], ast.BinOp(target, op, value))
@@ -793,6 +816,38 @@ class ASTTranslator:
                 raise PseudoPythonTypeCheckError('pseudo-python expects a bool or RegexpMatch test not %s' % serialize_type(test_node['pseudo_type']))
         else:
             return test_node
+
+    def _translate_slice(self, receiver, upper, lower, step, location):
+        self.assert_translatable('slice', step=(step, None))
+        # for some reason python ast has location info for most elements
+        # but not for Num.
+        # that's possibly genius, inconsisten consistent fucking genius, 
+        # thank you python ast (almost wishing I've used redbaron)
+        if upper:
+            upper_node = self._translate_node(upper)
+            self._confirm_index(upper_node['pseudo_type'], 'Int', getattr(upper, 'location', location), 'slice index')
+        if lower:
+            lower_node = self._translate_node(lower)
+            self._confirm_index(lower_node['pseudo_type'], 'Int', getattr(lower, 'location', location), 'slice index')
+        if upper and lower:
+            name = 'slice'
+            values = [lower_node, upper_node]
+        elif upper:
+            name = 'slice_to'
+            values = [upper_node]
+        elif lower:
+            name = 'slice_from'
+            values = [lower_node]
+        else:
+            name = 'slice_'
+            values = []
+        return {
+            'type': 'standard_method_call',
+            'receiver': receiver,
+            'message': name,
+            'args': values,
+            'pseudo_type': receiver['pseudo_type']
+        }
 
     def _translate_list(self, elts, ctx, location):
         if not elts:
@@ -899,7 +954,7 @@ class ASTTranslator:
             }
 
         else:
-            z = self._translate_node(slice)
+            return self._translate_slice(receiver=value_node, upper=slice.upper, step=slice.step, lower=slice.lower, location=location)
 
     def _translate_str(self, s, location):
         return {'type': 'string', 'value': s.replace('\n', '\\n'), 'pseudo_type': 'String'}
