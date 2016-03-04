@@ -1,24 +1,14 @@
-constants: []
+constants:
+- constant: K
+  init: {pseudo_type: Int, type: int, value: 2}
+  pseudo_type: Int
+  type: constant
 definitions: []
 dependencies: []
 main:
-- local: h
+- local: x
   pseudo_type: Void
   type: local_assignment
-  value: {pseudo_type: String, type: string, value: ''}
-  value_type: String
-- local: f
-  pseudo_type: Void
-  type: local_assignment
-  value:
-    args:
-    - elements:
-      - {name: h, pseudo_type: String, type: local}
-      pseudo_type: [Array, String]
-      type: list
-    message: c_format
-    pseudo_type: String
-    receiver: {pseudo_type: String, type: string, value: n%s}
-    type: standard_method_call
-  value_type: String
+  value: {pseudo_type: Int, type: int, value: 2}
+  value_type: Int
 type: module

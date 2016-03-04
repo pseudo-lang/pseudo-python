@@ -24,6 +24,12 @@ def z():
             f.write(clj)
     except pseudo_python.errors.PseudoError as e:
         print(colored(e, 'red'))
+        if e.suggestions:
+            print(colored(e, 'green'))
+        if e.right:
+            print(colored('\nright:\n%s' % e.right, 'green'))
+        if e.wrong:
+            print(colored('\nwrong:\n%s' % e.wrong, 'red'))
 
 if __name__ == '__main__':
     z()
@@ -41,3 +47,4 @@ show typecheck untranslatable messages with :
     def lala(e, f, *k): <- you can't use keyword arguments
     def function_name(arg_1, arg2_..)
 '''
+

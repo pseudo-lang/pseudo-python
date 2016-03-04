@@ -1,7 +1,7 @@
 import ast
 import pseudo_python.env
 from pseudo_python.builtin_typed_api import TYPED_API, serialize_type
-from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError
+from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError, cant_infer_error, translation_error
 from pseudo_python.api_translator import Standard, StandardCall, StandardMethodCall, FUNCTION_API, METHOD_API, OPERATOR_API
 
 BUILTIN_TYPES = {
@@ -51,9 +51,10 @@ PSEUDO_OPS = {
 
 class ASTTranslator:
 
-    def __init__(self, tree):
+    def __init__(self, tree, code):
         self.tree = tree
         self.in_class = False
+        self.lines = [''] + code.split('\n') # easier 1based access with lineno
         self.type_env = pseudo_python.env.Env(TYPED_API, None)
 
     def translate(self):
@@ -80,7 +81,7 @@ class ASTTranslator:
         for definition in self.definitions:
             if definition[0] == 'function':
                 if not isinstance(self._definition_index['functions'][definition[1]], dict):
-                    raise PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s" % definition[1])
+                    raise cant_infer_error(definition[1])
 
                 definitions.append(self._definition_index['functions'][definition[1]])
             elif definition[0] == 'class':  #inherited
@@ -92,7 +93,7 @@ class ASTTranslator:
                     # print(definition[1], method, self._definition_index)
                     m = self._definition_index[definition[1]][method]
                     if not isinstance(m, dict):
-                        raise PseudoPythonTypeCheckError("pseudo-python can't infer the types for %s#%s" % (definition[1], method))
+                        raise cant_infer_error('%s#%s' % (definition[1], method))
 
                     if method == '__init__':
                         c['constructor'] = m
@@ -127,7 +128,8 @@ class ASTTranslator:
                                       # for function/class defs to be filled by type inference later
             if isinstance(n, ast.Import):
                 if self.definitions or self.main:
-                    raise PseudoPythonNotTranslatableError('imports can be only on top: %s' % n.names[0].name)
+                    raise translation_error('imports can be only on top', (n.lineno, n.col_offset), self.lines[n.lineno])
+
                 self._imports.add(n.names[0].name)
                 self.type_env.top[n.names[0].name] = 'library'
 
@@ -150,7 +152,10 @@ class ASTTranslator:
                         self.type_env[n.name] = 'ExceptionType'
                         continue
                     elif len(n.bases) != 1 or not isinstance(n.bases[0], ast.Name) or n.bases[0].id not in self._definition_index:
-                        raise PseudoPythonNotTranslatableError('only single inheritance from an already defined class is supported ? class %s' % n.name)
+                        raise translation_error(
+                            'only single inheritance from an already defined class is supported',
+                            (n.bases[0].lineno, n.bases[0].col_offset),
+                            self.lines[n.lineno])
 
                     base = n.bases[0].id
                     self.type_env.top[n.name] = {l: t for l, t in self.type_env.top[base].items()}
@@ -170,21 +175,43 @@ class ASTTranslator:
                 for y, m in enumerate(n.body):
                     if isinstance(m, ast.FunctionDef):
                         if not m.args.args or m.args.args[0].arg != 'self':
-                            raise PseudoPythonNotTranslatableError('only methods with a self arguments are supported: %s#%s' % (n.name, m.name))
+                            raise translation_error(
+                                'only methods with a self arguments are supported(class %s)' % n.name,
+                                (m.lineno, m.col_offset + 4 + len(m.name) + 1),
+                                self.lines[m.lineno],
+                                'example: def method_name(self, x):')
+                            
                         self.definitions[-1][3].append(m.name)
                         self._definition_index[n.name][m.name] = m
                         self.type_env.top[n.name][m.name] = ['Function'] + ([None] * (len(m.args.args) - 1)) + [None]
                     else:
-                        raise PseudoPythonNotTranslatableError('only methods are supported in classes: %s' % type(m).__name__)
+                        raise translation_error('only methods are supported in classes',
+                            (m.lineno, m.col_offset),
+                            self.lines[m.lineno])
+
             elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
                 if n.targets[0].id[0].islower():
                     self.main.append(n)
                 elif any(letter.isalpha() and letter.islower() for letter in n.targets[0].id[1:]):
-                    raise PseudoPythonTypeCheckError('you make pseudo-python very pseudo-confused: please use only snake_case or SCREAMING_SNAKE_CASE for variables %s' % n.targets[0].id)
+                    raise type_check_error(
+                        'you make pseudo-python very pseudo-confused: please use only snake_case or SCREAMING_SNAKE_CASE for variables',
+                        (n.targets[0].lineno, n.targets[0].col_offset),
+                        self.lines[n.targets[0].lineno],
+                        suggestions='example:\ns = 2 # local\nK = 2 # constant')
                 elif self.main:
-                    raise PseudoPythonNotTranslatableError('%s: constants must be initialized before all other top level code' % n.targets[0].id)
+                    raise translation_error(
+                        'constants must be initialized before all other top level code',
+                        (n.targets[0].lineno, n.targets[0].col_offset),
+                        self.lines[n.targets[0].lineno],
+                        right='K = 2\ndef ..',
+                        wrong='def ..\nK = 2')
+
                 elif self.type_env.top[n.targets[0].id]:
-                    raise PseudoPythonNotTranslatableError("you can't override a constant in pseudo-python %s" % n.targets[0].id)
+                    raise translation_error(
+                        "you can't override a constant in pseudo-python",
+                        (n.targets[0].lineno, n.targets[0].col_offset),
+                        self.lines[n.targets[0].lineno])
+
                 else:
                     self.current_constant = n.targets[0].id
                     init = self._translate_node(n.value)
@@ -194,7 +221,7 @@ class ASTTranslator:
                         'init': init,
                         'pseudo_type': init['pseudo_type']
                     })
-                    self.type_env.top[init] = init['pseudo_type']
+                    self.type_env.top[n.targets[0].id] = init['pseudo_type']
                     self.current_constant = None
             else:
                 self.current_constant = None
@@ -203,7 +230,13 @@ class ASTTranslator:
     def _translate_node(self, node):
         if isinstance(node, ast.AST):
             if self.current_constant and type(node) not in [ast.Num, ast.Str, ast.List]:
-                raise PseudoPythonNotTranslatableError('You can initialize constants only with literals %s' % self.current_constant)
+                raise translation_error(
+                    'You can initialize constants only with literals',
+                    (node[0].lineno, node[0].col_offset),
+                    self.lines[node[0].lineno],
+                    right='K = [2, 4]',
+                    wrong='K = [2, x]')
+
             fields = {field: getattr(node, field) for field in node._fields}
             return getattr(self, '_translate_%s' % type(node).__name__.lower())(**fields)
         elif isinstance(node, list):
