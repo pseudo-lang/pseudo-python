@@ -11,4 +11,21 @@ main:
     pseudo_type: [List, Int]
     type: list
   value_type: [List, Int]
+- args:
+  - {pseudo_type: Int, type: int, value: 2}
+  - args: []
+    message: slice_
+    pseudo_type: [List, Int]
+    receiver:
+      name: l
+      pseudo_type: [List, Int]
+      type: local
+    type: standard_method_call
+  message: set_slice_to
+  pseudo_type: Void
+  receiver:
+    name: l
+    pseudo_type: [List, Int]
+    type: local
+  type: standard_method_call
 type: module

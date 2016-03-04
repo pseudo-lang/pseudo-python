@@ -737,7 +737,8 @@ class ASTTranslator:
                 if z['pseudo_type'] != value_node['pseudo_type']:
                     raise type_check_error(
                         'expected %s' % serialize_type(z['pseudo_type']),
-                        getattr(value, 'location', location), self.lines[location[0]])
+                        getattr(value, 'location', location), self.lines[location[0]],
+                        wrong_type=value_node['pseudo_type'])
 
                 z['message'] = 'set_%s' % z['message']
                 z['args'].append(value_node)
