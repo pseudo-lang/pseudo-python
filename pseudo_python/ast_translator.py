@@ -56,7 +56,7 @@ class ASTTranslator:
         self.tree = tree
         self.in_class = False
         self.lines = [''] + code.split('\n') # easier 1based access with lineno
-        self.type_env = pseudo_python.env.Env(TYPED_API, None)
+        self.type_env = pseudo_python.env.Env(dict(TYPED_API.items()), None)
 
     def translate(self):
         self.dependencies = []
@@ -91,7 +91,6 @@ class ASTTranslator:
                                for a
                                in self._attrs[definition[1]] if not self._attr_index[definition[1]][a][1]], 'methods': [], 'constructor': None}
                 for method in definition[3]:
-                    # print(definition[1], method, self._definition_index)
                     m = self._definition_index[definition[1]][method]
                     if not isinstance(m, dict):
                         raise cant_infer_error('%s#%s' % (definition[1], method))
@@ -287,7 +286,6 @@ class ASTTranslator:
     def _translate_call(self, func, args, keywords, starargs, kwargs, location):
         self.assert_translatable('call', keywords=([], keywords), starargs=(None, starargs), kwargs=(None, kwargs))
         arg_nodes = self._translate_node(args)
-
         if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
             return self._translate_builtin_call('global', func.id, arg_nodes, location)
 
@@ -308,7 +306,7 @@ class ASTTranslator:
 
             return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes, location)
 
-        else:
+        else:        
             if (func_node['type'] == 'local' or func_node['type'] == 'this') and func_node['pseudo_type'][-1] is None:
                 return self._translate_real_method_call('call', 'functions', None, 'self' if func_node['type'] == 'this' else func_node['name'], arg_nodes, location)
             elif func_node['type'] == 'typename':
@@ -325,7 +323,6 @@ class ASTTranslator:
 
                 self._real_type_check(func_node['pseudo_type'], [arg_node['pseudo_type'] for arg_node in arg_nodes], (func_node['name'] if 'name' in func_node else func_node['type']))
                 z = func_node['pseudo_type'][-1]
-
                 return {'type': 'call', 'function': func_node, 'args': arg_nodes, 'pseudo_type': z}
 
     def _translate_init(self, name, params, location):
@@ -360,8 +357,7 @@ class ASTTranslator:
             'pseudo_type': name
         }
 
-    def _translate_real_method_call(self, node_type, z, receiver, message, params):
-        print(node_type, z, receiver, message)
+    def _translate_real_method_call(self, node_type, z, receiver, message, params, location):
         c = self.type_env.top[z]
         param_types = [param['pseudo_type'] for param in params]
         if message in c and len(c[message]) == 2 or len(c[message]) > 2 and c[message][1]:
@@ -371,7 +367,7 @@ class ASTTranslator:
             q = c[message][-1]
 
         if node_type == 'call':
-            result = {'type': node_type, 'function': {'type': 'local', 'name': message}, 'args': params, 'pseudo_type': q}
+            result = {'type': node_type, 'function': {'type': 'local', 'name': message, 'pseudo_type': c[message]}, 'args': params, 'pseudo_type': q}
         else:
             result = {'type': node_type, 'message': message, 'args': params, 'pseudo_type': q}
             if node_type == 'method_call':
@@ -480,7 +476,6 @@ class ASTTranslator:
             if j == len(node.body) - 1:
                 self.is_last = True
             children.append(self._translate_node(child))
-            print(self.type_env.values)
             # print(args);input()
         self.function_name = outer_function_name
         self.current_class = outer_current_class
@@ -668,6 +663,8 @@ class ASTTranslator:
             name = targets[0].id
             e = self.type_env[name]
             if e:
+                # raise ValueError(ast.dump(targets[0]))
+                # 
                 a = self._compatible_types(e, value_node['pseudo_type'], "can't change the type of variable %s in %s " % (name, self.function_name))
             else:
                 a = value_node['pseudo_type']
@@ -679,10 +676,8 @@ class ASTTranslator:
                     'name': name,
                     'pseudo_type': value_node['pseudo_type']
                 },
-                'assignment_type': 'local'
                 'value': value_node,
-                'pseudo_type': 'Void',
-                'value_type': value_node['pseudo_type']
+                'pseudo_type': 'Void'
             }
         elif isinstance(targets[0], ast.Attribute):
             z = self._translate_node(targets[0].value)
@@ -717,8 +712,7 @@ class ASTTranslator:
                         'pseudo_type': value_node['pseudo_type']
                     },
                     'value': value_node,
-                    'pseudo_type': 'Void',
-                    'value_type': value_node['pseudo_type']
+                    'pseudo_type': 'Void'
                 }
             return {
                 'type': 'assignment',
@@ -729,8 +723,7 @@ class ASTTranslator:
                     'pseudo_type': a
                  },
                 'value': value_node,
-                'pseudo_type': 'Void',
-                'value_type': value_node['pseudo_type']
+                'pseudo_type': 'Void'
             }
         elif isinstance(targets[0], ast.Subscript):
             z = self._translate_node(targets[0])
@@ -738,10 +731,8 @@ class ASTTranslator:
                 return {
                     'type': 'assignment',
                     'target': z,
-                    'assignment_type': 'index',
                     'value': value_node,
-                    'pseudo_type': 'Void',
-                    'value_type': value_node['pseudo_type']
+                    'pseudo_type': 'Void'
                 }
             elif z['type'] == 'standard_method_call': # slice
                 if z['pseudo_type'] != value_node['pseudo_type']:
@@ -915,7 +906,7 @@ class ASTTranslator:
         accidentaly_homogeneous = True
         for j, element in enumerate(elements[1:]):
             element_nodes.append(self._translate_node(element))
-            print(self._hierarchy)
+            # print(self._hierarchy)
             if homogeneous:
                 element_type = self._compatible_types(element_nodes[-1]['pseudo_type'], element_type, "can't use different types in a %s" % kind)
             else:
@@ -995,7 +986,6 @@ class ASTTranslator:
 
     def _translate_with(self, items, body, location):
         if len(items) != 1 or not isinstance(items[0].context_expr, ast.Call) or not isinstance(items[0].context_expr.func, ast.Name) or items[0].context_expr.func.id != 'open':
-            print(not isinstance(items[0].context_expr, ast.Call))
             raise PseudoPythonTypeCheckError('pseudo-python supports with only for opening files')
         elif not isinstance(items[0].optional_vars, ast.Name):
            raise PseudoPythonTypeCheckError('pseudo-python needs exactly one name var for with statements' )
@@ -1217,7 +1207,6 @@ class ASTTranslator:
 
     def _translate_pure_functions(self):
         for f in self.definitions:
-            print(self.type_env.values)
             if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 2:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
 
