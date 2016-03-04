@@ -19,9 +19,9 @@ def cant_infer_error(name):
 
 def beautiful_error(exception):
     def f(function):
-        def decorated(data, location=None, code=None, used_type=None, **options):
+        def decorated(data, location=None, code=None, wrong_type=None, **options):
             return exception('%s%s%s:\n%s\n%s^' % (
-                ('wrong type %s\n' % serialize_type(used_type) if used_type else ''),
+                ('wrong type %s\n' % serialize_type(wrong_type) if wrong_type else ''),
                 data,
                 (' on line %d column %d' % location) if location else '',
                 code or '',
@@ -31,11 +31,11 @@ def beautiful_error(exception):
     return f
 
 @beautiful_error(PseudoPythonTypeCheckError)
-def type_check_error(data, location=None, code=None, used_type=None, **options):
+def type_check_error(data, location=None, code=None, wrong_type=None, **options):
     pass
 
 @beautiful_error(PseudoPythonNotTranslatableError)
-def translation_error(data, location=None, code=None, used_type=None, **options):
+def translation_error(data, location=None, code=None, wrong_type=None, **options):
     pass
 
 def tab_aware(location, code):

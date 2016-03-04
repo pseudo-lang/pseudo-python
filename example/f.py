@@ -1,4 +1,2 @@
-import math
-K = 2
-x = 2
-math.si(2)
+l = [2]
+l.lit()

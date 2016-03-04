@@ -1,20 +1,14 @@
-constants:
-- constant: K
-  init: {pseudo_type: Int, type: int, value: 2}
-  pseudo_type: Int
-  type: constant
+constants: []
 definitions: []
 dependencies: []
 main:
-- local: x
+- local: l
   pseudo_type: Void
   type: local_assignment
-  value: {pseudo_type: Int, type: int, value: 2}
-  value_type: Int
-- args:
-  - {pseudo_type: Int, type: int, value: 2}
-  function: sin
-  namespace: math
-  pseudo_type: Float
-  type: standard_call
+  value:
+    elements:
+    - {pseudo_type: Int, type: int, value: 2}
+    pseudo_type: [List, Int]
+    type: list
+  value_type: [List, Int]
 type: module

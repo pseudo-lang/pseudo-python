@@ -196,7 +196,13 @@ TYPED_API = {
     'RegexpMatch': {
         'group':        ['Int', 'String'],
         'length':       ['Int']
-    }
+    },
+
+    '_generic_List':    ['List', '@t'],
+    '_generic_Set':     ['Set', '@t'],
+    '_generic_Array':   ['Array', '@t'],
+    '_generic_Tuple':   ['Tuple', '@t'],
+    '_generic_Dictionary': ['Dictionary', '@k', '@v'],
     # 'List#pop':        [_, '@t'],
     # 'List#insert':     [_, 'Null'],
     # 'List#remove':     [_, 'Null'],
