@@ -14,11 +14,19 @@ BUILTIN_TYPES = {
     'dict':     'Dictionary',
     'set':      'Set',
     'tuple':    'Tuple',
+    'bool':     'Boolean',
     'SRE_Pattern': 'Regexp',
     'SRE_Match': 'RegexpMatch'
 }
 
 PSEUDON_BUILTIN_TYPES = {v: k for k, v in BUILTIN_TYPES.items()}
+
+BUILTIN_SIMPLE_TYPES = {
+    'int':      'Int',
+    'float':    'Float',
+    'str':      'String',
+    'bool':     'Boolean'
+}
 
 BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int'}
 
@@ -66,6 +74,7 @@ class ASTTranslator:
         self.main = []
         self._exceptions = {'Exception'}
         self._hierarchy = {}
+        self._translated = {'functions': set()}
         self._attr_index = {}
         self._attrs = {}
         self._imports = set()
@@ -436,13 +445,16 @@ class ASTTranslator:
 
         node_args = node.args.args if z == 'functions' else node.args.args[1:]
 
-        if len(node_args) != len(args):
+        if args is not None and len(node_args) != len(args):
             raise translation_error('%s expecting %d args' % (node.name, len(node_args)),
                 location, self.lines[location[0]])
 
+        if z not in self._translated:
+            self._translated[z] = set()
+
         # 0-arg functions are inferred only in the beginning
 
-        if args and self.type_env.top[z][name][1]:
+        if args != [] and name in self._translated[z]: # self.type_env.top[z][name][1]:
             raise type_check_error(
                 'please move recursion in a next branch in %s' % node.name,
                 location, self.lines[location[0]],
@@ -450,12 +462,18 @@ class ASTTranslator:
                 right='def lala(e):\n    if e == 0:\n        return 0\n   else:\n        return lala(e - 2)',
                 wrong='def lala(e):\n    if e > 0:\n        return lala(e - 2)\n..')
 
+        self._translated[z].add(name)
 
-        env = {a.arg: type for a, type in zip(node_args, args)}
+        if args is not None:
+            env = {a.arg: type for a, type in zip(node_args, args)}
+        else:
+            env = {a.arg: type for a, type in zip(node_args, self._type_env.top[z][name][1:-1])}
+
         if receiver:
             env['self'] = receiver['pseudo_type']
         self.type_env, old_type_env = self.type_env.top.child_env(env), self.type_env
-        self.type_env.top[z][name][1:-1] = args
+        if args is not None:
+            self.type_env.top[z][name][1:-1] = args
 
         outer_current_class, self.current_class = self.current_class, z
         outer_function_name, self.function_name = self.function_name, name
@@ -1200,6 +1218,37 @@ class ASTTranslator:
             if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 2:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
 
+    def _translate_hinted_functions(self):
+        for f in self.definitions:
+            if f[0] == 'functions' and len(self.type_env['functions'][f[1]]) > 2 and self._definition_index[f[1]].args.args[0].annotation:
+                types = []
+                for h in self._definition_index[f[1]].args.args:
+                    if h.annotation:
+                        if isinstance(h.annotation, ast.Name):
+                            types.append(self._hint(h.annotation))
+                    else:
+                        raise translation_error('expected annotations for all args, no annotation for %s' % h.arg,
+                                (h.lineno, h.col_offset), self.lines[h.lineno])
+                return_annotation = self._definition_index[f[1]].returns
+                if return_annotation:
+                    return_type = self._hint(return_annotation)
+                else:
+                    return_type = 'Void' # None
+                self._type_env['functions'][f[1]][1:] = types + [return_type]
+                self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1])
+    
+    def _hint(self, x):
+        if x.id in BUILTIN_SIMPLE_TYPES:
+            return BUILTIN_SIMPLE_TYPES[x.id]
+        elif x.id in self.type_env:
+            return x.id
+        else:
+            raise type_check_error('type not recognized',
+                (x.lineno, x.col_offset), self.lines[x.lineno],
+                suggestion='supported type hints are:\n  ' + '\n  '.join(
+                    ['int', 'float', 'str', 'bool',
+                     'List[<element_hint>]', 'Dict[<key_hint>, <value_hint>]', 'Tuple[<element_hints>..]', 'Set[<element_hint>]',
+                     'your class e.g. Human']))
 
     def _translate_for(self, iter, target, body, orelse, location):
         self.assert_translatable('for', orelse=([], orelse))
