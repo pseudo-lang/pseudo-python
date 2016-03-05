@@ -106,18 +106,6 @@ class ASTTranslator:
 
         return definitions
 
-    # def _serialize_node(self, node):
-    #     if isinstance(node, dict):
-    #         pseudo_type = node.get('pseudo_type')
-    #         if pseudo_type:
-    #             node['pseudo_type'] = serialize_type(node['pseudo_type'])
-    #         for _, child in node.items():
-    #             self._serialize_node(child)
-    #     elif isinstance(node, list):
-    #         for l in node:
-    #             self._serialize_node(l)
-    #     return node
-
     def _translate_main(self):
         self.current_class = None
         self.function_name = 'global scope'
@@ -1211,6 +1199,7 @@ class ASTTranslator:
         for f in self.definitions:
             if f[0] == 'function' and len(self.type_env['functions'][f[1]]) == 2:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], [])
+
 
     def _translate_for(self, iter, target, body, orelse, location):
         self.assert_translatable('for', orelse=([], orelse))
