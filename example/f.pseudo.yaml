@@ -20,6 +20,46 @@ definitions:
   - Int
   return_type: Int
   type: function_definition
+- attrs: []
+  base: null
+  constructor: null
+  methods:
+  - block:
+    - pseudo_type: B
+      type: implicit_return
+      value:
+        class: {name: B, type: typename}
+        params:
+        - {name: a, pseudo_type: Int, type: local}
+        pseudo_type: B
+        type: new_instance
+    is_public: true
+    name: expand
+    params: [a]
+    pseudo_type: [Function, Int, B]
+    return_type: B
+    this: {name: A, type: typename}
+    type: method_definition
+  name: A
+  type: class_definition
+- attrs:
+  - {is_public: false, name: a, pseudo_type: Int, type: class_attr}
+  base: null
+  constructor:
+    block:
+    - pseudo_type: Void
+      target: {name: a, pseudo_type: Int, type: instance_variable}
+      type: assignment
+      value: {name: a, pseudo_type: Int, type: local}
+    name: __init__
+    params: [a]
+    pseudo_type: [Function, Int, B]
+    return_type: null
+    this: {name: B, type: typename}
+    type: constructor
+  methods: []
+  name: B
+  type: class_definition
 dependencies: []
 main: []
 type: module

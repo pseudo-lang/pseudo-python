@@ -110,6 +110,10 @@ class ASTTranslator:
                 for method in definition[3]:
                     m = self._definition_index[definition[1]][method]
                     if not isinstance(m, dict):
+                        # input(self.type_env[definition[1]])
+                        self._translate_hinted_fun(method, definition[1])
+                    m = self._definition_index[definition[1]][method] 
+                    if not isinstance(m, dict):
                         raise cant_infer_error('%s#%s' % (definition[1], method), self.lines[m.lineno])
 
                     if method == '__init__':
@@ -358,6 +362,9 @@ class ASTTranslator:
         if init:
             self._definition_index[name]['__init__'] = self._translate_function(self._definition_index[name]['__init__'], name, {'pseudo_type': name}, '__init__', [p['pseudo_type'] for p in params])
             init[-1] = name
+
+        for label, m in self._definition_index[name].items():
+            self._translate_hinted_fun(label, name)
 
         for label, m in self._definition_index[name].items():
             if len(self.type_env.top[name][label]) == 2 and label != '__init__':
@@ -1236,50 +1243,59 @@ class ASTTranslator:
 
     def _translate_hinted_functions(self):
         for f in self.definitions:
-            # import pdb; pdb.set_trace();
-            
-            if f[0] == 'function' and len(self.type_env['functions'][f[1]]) > 2 and self._definition_index['functions'][f[1]].args.args[0].annotation:
-                types = []
-                for h in self._definition_index['functions'][f[1]].args.args:
-                    if h.annotation:
-                        # if isinstance(h.annotation, ast.Name):
-                        types.append(self._hint(h.annotation))
-                        # elif isinstance(h.annotation, ast.Subscript):
-                    else:
-                        raise translation_error('expected annotations for all args, no annotation for %s' % h.arg,
-                                (h.lineno, h.col_offset), self.lines[h.lineno])
-            
-                return_annotation = self._definition_index['functions'][f[1]].returns
-                if return_annotation:
-                    return_type = self._hint(return_annotation)
+            if f[0] == 'function':
+                self._translate_hinted_fun(f[1], 'functions')
+
+    def _translate_hinted_fun(self, f, namespace):
+        print(namespace, self.type_env[namespace])
+        if isinstance(self._definition_index[namespace][f], dict):
+            return
+        if namespace == 'functions':
+            args = self._definition_index[namespace][f].args.args
+        else:
+            args = self._definition_index[namespace][f].args.args[1:]            
+        if len(self.type_env[namespace][f]) > 2 and args[0].annotation:
+            types = []
+            for h in args:
+                if h.annotation:
+                    types.append(self._hint(h.annotation))
                 else:
-                    return_type = 'Void' # None
-                self.type_env['functions'][f[1]][1:] = types + [return_type]
-                self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], None)
+                    raise translation_error('expected annotations for all args, no annotation for %s' % h.arg,
+                            (h.lineno, h.col_offset), self.lines[h.lineno])
+        
+            return_annotation = self._definition_index[namespace][f].returns
+            if return_annotation:
+                return_type = self._hint(return_annotation)
+            else:
+                return_type = 'Void' # None
+            self.type_env[namespace][f][1:] = types + [return_type]
+            self._definition_index[namespace][f] = self._translate_function(self._definition_index[namespace][f], namespace, None, f, None)
     
     def _hint(self, x):
-        if isinstance(x, ast.Name):
-            if x.id in BUILTIN_SIMPLE_TYPES:
-                return BUILTIN_SIMPLE_TYPES[x.id]
-            elif x.id in self.type_env.top.values:
-                return x.id
-        elif isinstance(x, ast.Subscript) and isinstance(x.value, ast.Name):
-            if x.value.id in ['List', 'Set', 'Dict', 'Tuple', 'Callable']:
-                if x.value.id not in self._typing_imports:
-                    raise translation_error('please add\nfrom typing import %s on top to use it\n' % x.value.id, (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+        if isinstance(x, (ast.Name, ast.Str)):
+            name = x.id if isinstance(x, ast.Name) else x.s
+            if name in BUILTIN_SIMPLE_TYPES:
+                return BUILTIN_SIMPLE_TYPES[name]
+            elif name in self.type_env.top.values:
+                return name
+        elif isinstance(x, ast.Subscript) and isinstance(x.value, (ast.Name, ast.Str)):
+            name = x.value.id if isinstance(x.value, ast.Name) else x.value.s
+            if name in ['List', 'Set', 'Dict', 'Tuple', 'Callable']:
+                if name not in self._typing_imports:
+                    raise translation_error('please add\nfrom typing import %s on top to use it\n' % name, (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
                 if not isinstance(x.slice, ast.Index):
                     raise translation_error('invalid index', (x.value.lineno, x.value.col_offset), self.lines[x.lineno])
                 index = x.slice.value
-                if x.value.id in ['List', 'Set']:
+                if name in ['List', 'Set']:
                     if not isinstance(index, (ast.Name, ast.Subscript)):
-                        raise type_check_error('%s expects one valid generic arguments' % x.value.id, (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
-                    return [x.value.id, self._hint(index)]
-                elif x.value.id == 'Tuple':
+                        raise type_check_error('%s expects one valid generic arguments' % name, (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+                    return [name, self._hint(index)]
+                elif name == 'Tuple':
                     # import pdb;pdb.set_trace()
                     if not isinstance(index, ast.Tuple) or any(not isinstance(y, (ast.Name, ast.Subscript)) for y in index.elts):
                         raise type_check_error('Tuple expected valid generic arguments', (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
                     return ['Tuple'] + [self._hint(y) for y in index.elts]
-                elif x.value.id == 'Dict':
+                elif name == 'Dict':
                     if not isinstance(index, ast.Tuple) or len(index.elts) != 2 or not isinstance(index.elts[1], (ast.Name, ast.Subscript)):
                         raise type_check_error('Dict expected 2 valid generic arguments', (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
                     if not isinstance(index.elts[0], ast.Name) or index.elts[0].id not in KEY_TYPES:
