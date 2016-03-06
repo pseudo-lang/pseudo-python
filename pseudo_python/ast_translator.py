@@ -82,6 +82,7 @@ class ASTTranslator:
         self.function_name = 'top level'
         self.type_env['functions'] = {}
         self._translate_top_level(self.tree)
+        self._translate_hinted_functions()
         self._translate_pure_functions()
         main = self._translate_main()
         definitions = self._translate_definitions()
@@ -467,7 +468,7 @@ class ASTTranslator:
         if args is not None:
             env = {a.arg: type for a, type in zip(node_args, args)}
         else:
-            env = {a.arg: type for a, type in zip(node_args, self._type_env.top[z][name][1:-1])}
+            env = {a.arg: type for a, type in zip(node_args, self.type_env.top[z][name][1:-1])}
 
         if receiver:
             env['self'] = receiver['pseudo_type']
@@ -1220,22 +1221,25 @@ class ASTTranslator:
 
     def _translate_hinted_functions(self):
         for f in self.definitions:
-            if f[0] == 'functions' and len(self.type_env['functions'][f[1]]) > 2 and self._definition_index[f[1]].args.args[0].annotation:
+            # import pdb; pdb.set_trace();
+            
+            if f[0] == 'function' and len(self.type_env['functions'][f[1]]) > 2 and self._definition_index['functions'][f[1]].args.args[0].annotation:
                 types = []
-                for h in self._definition_index[f[1]].args.args:
+                for h in self._definition_index['functions'][f[1]].args.args:
                     if h.annotation:
                         if isinstance(h.annotation, ast.Name):
                             types.append(self._hint(h.annotation))
                     else:
                         raise translation_error('expected annotations for all args, no annotation for %s' % h.arg,
                                 (h.lineno, h.col_offset), self.lines[h.lineno])
-                return_annotation = self._definition_index[f[1]].returns
+            
+                return_annotation = self._definition_index['functions'][f[1]].returns
                 if return_annotation:
                     return_type = self._hint(return_annotation)
                 else:
                     return_type = 'Void' # None
-                self._type_env['functions'][f[1]][1:] = types + [return_type]
-                self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1])
+                self.type_env['functions'][f[1]][1:] = types + [return_type]
+                self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], None)
     
     def _hint(self, x):
         if x.id in BUILTIN_SIMPLE_TYPES:
