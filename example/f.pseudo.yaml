@@ -3,20 +3,23 @@ definitions:
 - block:
   - pseudo_type: Int
     type: implicit_return
-    value: {name: s, pseudo_type: Int, type: local}
+    value:
+      args:
+      - {pseudo_type: Int, type: int, value: 2}
+      function:
+        name: s
+        pseudo_type: [Function, Int, Int]
+        type: local
+      pseudo_type: Int
+      type: call
   name: f
   params: [s]
-  pseudo_type: [Function, Int, Int]
+  pseudo_type:
+  - Function
+  - [Function, Int, Int]
+  - Int
   return_type: Int
   type: function_definition
 dependencies: []
-main:
-- args:
-  - {pseudo_type: Int, type: int, value: 2}
-  function:
-    name: f
-    pseudo_type: [Function, Int, Int]
-    type: local
-  pseudo_type: Int
-  type: call
+main: []
 type: module

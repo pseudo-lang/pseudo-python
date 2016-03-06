@@ -28,6 +28,10 @@ BUILTIN_SIMPLE_TYPES = {
     'bool':     'Boolean'
 }
 
+KEY_TYPES = {'str', 'int', 'float', 'bool'}
+
+PSEUDO_KEY_TYPES = {'String', 'Int', 'Float', 'Bool'}
+
 BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int'}
 
 ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
@@ -78,6 +82,7 @@ class ASTTranslator:
         self._attr_index = {}
         self._attrs = {}
         self._imports = set()
+        self._typing_imports = set()
         self.current_class = None
         self.function_name = 'top level'
         self.type_env['functions'] = {}
@@ -132,6 +137,14 @@ class ASTTranslator:
 
                 self._imports.add(n.names[0].name)
                 self.type_env.top['_%s' % n.names[0].name], self.type_env.top[n.names[0].name] = self.type_env.top[n.names[0].name], 'library'
+
+            elif isinstance(n, ast.ImportFrom):
+                if self.definitions or self.main:
+                    raise translation_error('imports can be only on top', (n.lineno, n.col_offset), self.lines[n.lineno])
+                if n.module != 'typing' or any(al.asname for al in n.names):
+                    raise translation_error('only import <x> and from typing import <type>.. supported', (n.lineno, n.col_offset), self.lines[n.lineno])
+
+                self._typing_imports |= {al.name for al in n.names}
 
             elif isinstance(n, ast.FunctionDef):
                 self.definitions.append(('function', n.name))
@@ -930,7 +943,9 @@ class ASTTranslator:
         value_node = self._translate_node(value)
         value_general_type = self._general_type(value_node['pseudo_type'])
         if value_general_type not in INDEXABLE_TYPES:
-            raise PseudoPythonTypeCheckError('pseudo-python can use [] only on String, List, Dictionary or Tuple : %s' % value_node['pseudo_type'])
+            raise type_check_error('pseudo-python can use [] only on String, List, Dictionary or Tuple',
+                location, self.lines[location[0]],
+                wrong_type=value_node['pseudo_type'])
 
         if isinstance(slice, ast.Index):
             z = self._translate_node(slice.value)
@@ -1227,8 +1242,9 @@ class ASTTranslator:
                 types = []
                 for h in self._definition_index['functions'][f[1]].args.args:
                     if h.annotation:
-                        if isinstance(h.annotation, ast.Name):
-                            types.append(self._hint(h.annotation))
+                        # if isinstance(h.annotation, ast.Name):
+                        types.append(self._hint(h.annotation))
+                        # elif isinstance(h.annotation, ast.Subscript):
                     else:
                         raise translation_error('expected annotations for all args, no annotation for %s' % h.arg,
                                 (h.lineno, h.col_offset), self.lines[h.lineno])
@@ -1242,17 +1258,46 @@ class ASTTranslator:
                 self._definition_index['functions'][f[1]] = self._translate_function(self._definition_index['functions'][f[1]], 'functions', None, f[1], None)
     
     def _hint(self, x):
-        if x.id in BUILTIN_SIMPLE_TYPES:
-            return BUILTIN_SIMPLE_TYPES[x.id]
-        elif x.id in self.type_env:
-            return x.id
-        else:
-            raise type_check_error('type not recognized',
-                (x.lineno, x.col_offset), self.lines[x.lineno],
-                suggestion='supported type hints are:\n  ' + '\n  '.join(
-                    ['int', 'float', 'str', 'bool',
-                     'List[<element_hint>]', 'Dict[<key_hint>, <value_hint>]', 'Tuple[<element_hints>..]', 'Set[<element_hint>]',
-                     'your class e.g. Human']))
+        if isinstance(x, ast.Name):
+            if x.id in BUILTIN_SIMPLE_TYPES:
+                return BUILTIN_SIMPLE_TYPES[x.id]
+            elif x.id in self.type_env.top.values:
+                return x.id
+        elif isinstance(x, ast.Subscript) and isinstance(x.value, ast.Name):
+            if x.value.id in ['List', 'Set', 'Dict', 'Tuple', 'Callable']:
+                if x.value.id not in self._typing_imports:
+                    raise translation_error('please add\nfrom typing import %s on top to use it\n' % x.value.id, (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+                if not isinstance(x.slice, ast.Index):
+                    raise translation_error('invalid index', (x.value.lineno, x.value.col_offset), self.lines[x.lineno])
+                index = x.slice.value
+                if x.value.id in ['List', 'Set']:
+                    if not isinstance(index, (ast.Name, ast.Subscript)):
+                        raise type_check_error('%s expects one valid generic arguments' % x.value.id, (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+                    return [x.value.id, self._hint(index)]
+                elif x.value.id == 'Tuple':
+                    # import pdb;pdb.set_trace()
+                    if not isinstance(index, ast.Tuple) or any(not isinstance(y, (ast.Name, ast.Subscript)) for y in index.elts):
+                        raise type_check_error('Tuple expected valid generic arguments', (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+                    return ['Tuple'] + [self._hint(y) for y in index.elts]
+                elif x.value.id == 'Dict':
+                    if not isinstance(index, ast.Tuple) or len(index.elts) != 2 or not isinstance(index.elts[1], (ast.Name, ast.Subscript)):
+                        raise type_check_error('Dict expected 2 valid generic arguments', (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+                    if not isinstance(index.elts[0], ast.Name) or index.elts[0].id not in KEY_TYPES:
+                        raise type_check_error('type not supported as a dictionary key type', (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno],
+                            suggestions='only those types are supported:\n  %s  ' % '\n  '.join(PSEUDO_KEY_TYPES),
+                            right='  Dict[str, List[int]]',
+                            wrong='  Dict[List[int], Tuple[int]]')
+                    return ['Dictionary', self._hint(index.elts[0]), self._hint(index.elts[1])]
+                else:
+                    if not isinstance(index, ast.Tuple) or len(index.elts) != 2 or not isinstance(index.elts[0], ast.List) or not isinstance(index.elts[1], (ast.Name, ast.Subscript)) or any(not isinstance(y, (ast.Name, ast.Subscript)) for y in index.elts[0].elts):
+                        raise type_check_error('Callable expected valid generic arguments of the form Callable[[<arg_type>, <arg_type>*], <return>]', (x.value.lineno, x.value.col_offset), self.lines[x.value.lineno])
+                    return ['Function'] + [self._hint(y) for y in index.elts[0].elts] + [self._hint(index.elts[1])]
+        raise type_check_error('type not recognized',
+            (x.lineno, x.col_offset), self.lines[x.lineno],
+            suggestions='supported type hints are:\n  ' + '\n  '.join(
+                ['int', 'float', 'str', 'bool',
+                 'List[<element_hint>]', 'Dict[<key_hint>, <value_hint>]', 'Tuple[<element_hints>..]', 'Set[<element_hint>]', 'Callable[[<arg_hint>*], <return_hin>]'
+                 'your class e.g. Human']))
 
     def _translate_for(self, iter, target, body, orelse, location):
         self.assert_translatable('for', orelse=([], orelse))
