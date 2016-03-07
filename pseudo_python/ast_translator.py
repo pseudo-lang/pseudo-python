@@ -77,6 +77,7 @@ class ASTTranslator:
         self.constants = []
         self.main = []
         self._exceptions = {'Exception'}
+        self.custom_exceptions = []
         self._hierarchy = {}
         self._translated = {'functions': set()}
         self._attr_index = {}
@@ -91,8 +92,7 @@ class ASTTranslator:
         self._translate_pure_functions()
         main = self._translate_main()
         definitions = self._translate_definitions()
-
-        return {'type': 'module', 'dependencies': self.dependencies, 'constants': self.constants, 'definitions': definitions, 'main': main}
+        return {'type': 'module', 'dependencies': self.dependencies, 'custom_exceptions': self.custom_exceptions, 'constants': self.constants, 'definitions': definitions, 'main': main}
 
     def _translate_definitions(self):
         definitions = []
@@ -160,7 +160,7 @@ class ASTTranslator:
                 self._hierarchy[n.name] = (None, set())
                 if n.bases:
                     if len(n.bases) == 1 and isinstance(n.bases[0], ast.Name) and n.bases[0].id in self._exceptions:
-                        self.main.append({
+                        self.custom_exceptions.append({
                             'type': 'custom_exception',
                             'name': n.name,
                             'base': None if n.bases[0].id == 'Exception' else n.bases[0].id
@@ -372,8 +372,8 @@ class ASTTranslator:
 
         return {
             'type': 'new_instance',
-            'class': {'type': 'typename', 'name': name},
-            'params': params,
+            'class_name': {'type': 'typename', 'name': name},
+            'args': params,
             'pseudo_type': name
         }
 
@@ -922,7 +922,7 @@ class ASTTranslator:
         element_nodes, accidentaly_homogeneous, element_type = self._translate_elements(elts, 'tuple', homogeneous=False)
 
         return {
-            'type': 'tuple',
+            'type': 'array' if accidentaly_homogeneous else 'tuple',
             'pseudo_type': ['Array', element_type, len(elts)] if accidentaly_homogeneous else ['Tuple'] + element_type,
             'elements': element_nodes
         }
