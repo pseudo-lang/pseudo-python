@@ -3,7 +3,7 @@
 
 #pseudo-python
 
-A python to javascript / ruby / c++ / go / c# / php translator
+A Python to JavaScript / Ruby / C++ / Go / C# / PHP translator
 
 [Pseudo](https://github.com/alehander42/pseudo) is a framework for high level code generation: it is used by this compiler to translate a subset of Python to all Pseudo-supported languages
 
