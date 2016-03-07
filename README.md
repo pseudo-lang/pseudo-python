@@ -1,30 +1,23 @@
+[![Build Status](https://travis-ci.org/alehander42/pseudo-python.svg?branch=master)](https://travis-ci.org/alehander42/pseudo-python)
+[![MIT License](http://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 #pseudo-python
 
-a python to pseudo translator
+A python to javascript / ruby / c++ / go / c# / php translator
 
-Pseudo is a dynamic language intertranspiler: it can translate a subset of each supported language to a any of the others.
-
-This Python to `Pseudo` translator would add automatic support for
-  * Python to JavaScript
-  * Python to C++
-  * Python to C#
-  * Python to Go
-  * Python to Ruby
-  * Python to any other pseudo-supported language
-
-[pseudo compiler](https://github.com/alehander42/pseudo)
+[Pseudo](https://github.com/alehander42/pseudo) is a framework for high level code generation: it is used by this compiler to translate a subset of Python to all Pseudo-supported languages
 
 ## supported subset
 
-`Pseudo` supports a very clear and somehow limited subset of a language:
+Pseudo supports a very clear and somehow limited subset of a language:
   
   * basic types and collections and standard library methods for them
   
-  * integer, float, string, boolean, nil
+  * integer, float, string, boolean
   * lists
   * dicts
   * sets
-  * tuples(fixed length heterogeneous lists)
+  * tuples/structs(fixed length heterogeneous lists)
   * fixed size arrays
   * regular expressions
 
@@ -36,38 +29,19 @@ This Python to `Pseudo` translator would add automatic support for
     * basically a constructor + a collection of instance methods, no fancy metaprogramming etc supported
 
   * exception-based error handling with support for custom exceptions
+  (target languages support return-based error handling too)
   
   * io: print/input, file read/write, system and subprocess commands
 
-  * iteration (for-in-range / for-each / for-in-zip / while)
+  * iteration (for-in-range / for-each / iterating over several collections / while)
   * conditionals (if / else if / else)
   * standard math/logical operations
-
-## why
-
-Supporting full-blown Python to Ruby auto translation is hard.
-However often we need to
-
-  * translate/support some algorithms in different languages
-  * translate/support some text/data processing tool in different languages
-  * generate code for the same task/algorithm in different languages
-
-Often that code is(or can be) expressed in very similar way, with
-similar constructs and basic types and data structures. On that level
-a lot of dynamic languages are very similar and the only real difference
-is syntax and methods api. That's a feasible task for automatic translation
-and actually the existance of `Pseudo` is to fullfill a need of another
-existing project.
-
-You can almost think of it in a "~json-for-algorithms" way: we express
-our code with standard basic types, collections and simple classes and we can translate to a common format(pseudo code) and using it as a middle ground between each supported language
-
-Error handling: support for hierarchies of custom exceptions, weak support for builtin exceptions, only catching and raising an Exception
 
 ## pseudo-python compiler
 
 pseudo-python checks if your program is using a valid pseudo-translatable subset of Python, type checks it according to pseudo type rules and generates a `<filename>.pseudo.yaml` output file containing pseudo-ast code
 
+[TODO]
 you can directly run `pseudo-python <filename.py> <lang>` e.g.
 
 ```bash
@@ -76,8 +50,12 @@ pseudo-python <filename.py> cpp
 ``` 
 etc for all the supported pseudo languages (javascript, c++, c#, go, ruby and python)
 
+## error messages
+
 a lot of work has been put into making pseudo-python error messages as clear and helpful as possible: they show the offending snippet of code and 
 often they offer suggestions, list possible fixes or right/wrong ways to write something
+
+![Screenshot of error messages](http://i.imgur.com/8W7QNgZ.png)
 
 ## type inference
 
@@ -126,9 +104,3 @@ but methods in children should accept the same types as their equivalents in the
 The easiest way to play with the type system is to just try several programs: `pseudo-python` errors should be enough to guide you, if not, 
 you can always open an issue
 
-## pseudo-python progress
-
-- [x] type inference
-  - [x] checks if return type is consistent
-  - [x] infers collection element types
-  - [x] infers class attributes and their types
