@@ -1,0 +1,9 @@
+language: python
+python:
+  - "3.4"
+script: coverage run -m unittest discover tests
+before_install:
+  - pip install codecov
+  - pip install coverage
+after_success:
+  - codecov

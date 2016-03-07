@@ -5,9 +5,9 @@ class TestLanguage(type):
             def test(self):
                 for input, exp in cases.items():
                     if isinstance(exp, list):
-                        exp = {'type': 'module', 'dependencies': [], 'constants': [], 'definitions': [], 'main': exp}
+                        exp = {'type': 'module', 'dependencies': [], 'custom_exceptions': [], 'constants': [], 'definitions': [], 'main': exp}
                     else:
-                        exp = {'type': 'module', 'dependencies': [], 'constants': exp.get('constants', []), 'definitions': exp.get('definitions', []), 'main': exp['main']}
+                        exp = {'type': 'module', 'dependencies': [], 'custom_exceptions': [], 'constants': exp.get('constants', []), 'definitions': exp.get('definitions', []), 'main': exp['main']}
 
                     self.assertEqual(self.translate(input), exp)
             return test
