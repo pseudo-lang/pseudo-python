@@ -76,6 +76,7 @@ class TestPython(unittest.TestCase, metaclass=test_language.TestLanguage):
         #         'pseudo_type': 'Void'
         #     }]
         # },
+        # extensive tests in v0.3/v0.4 when ast spec stabilizes
         function = {
             t('''
             def x(a):

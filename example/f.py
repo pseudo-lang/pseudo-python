@@ -1,4 +1,7 @@
-class ExError(Exception):
-    pass
+class L:
+	def __init__(self, a):
+		self.a = a
 
-raise ExError("s")
+s = L(2)
+e = 'x'
+e.k()
