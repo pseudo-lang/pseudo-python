@@ -1,6 +1,6 @@
 import ast
 import pseudo_python.env
-from pseudo_python.builtin_typed_api import TYPED_API
+from pseudo_python.builtin_typed_api import TYPED_API, ORIGINAL_METHODS
 from pseudo_python.errors import PseudoPythonNotTranslatableError, PseudoPythonTypeCheckError, cant_infer_error, translation_error, type_check_error
 from pseudo_python.api_translator import Standard, StandardCall, StandardMethodCall, FUNCTION_API, METHOD_API, OPERATOR_API
 from pseudo_python.helpers import serialize_type, prepare_table
@@ -32,7 +32,7 @@ KEY_TYPES = {'str', 'int', 'float', 'bool'}
 
 PSEUDO_KEY_TYPES = {'String', 'Int', 'Float', 'Bool'}
 
-BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int'}
+BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int', 'len', 'any', 'all', 'sum'}
 
 ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
 
@@ -324,11 +324,90 @@ class ASTTranslator:
                 return z
 
     def _translate_call(self, func, args, keywords, starargs, kwargs, location):
-        self.assert_translatable('call', keywords=([], keywords), starargs=(None, starargs), kwargs=(None, kwargs))
-        arg_nodes = self._translate_node(args)
-        if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
-            return self._translate_builtin_call('global', func.id, arg_nodes, location)
+        self.assert_translatable('call', keywords=([], keywords), kwargs=(None, kwargs))
+        if starargs:
+            many_arg = self._translate_node(starargs)
+            if isinstance(many_arg['pseudo_type'], list) and many_arg['pseudo_type'][0] == 'Tuple':
+                args += [{
+                    'type': 'index',
+                    'sequence': many_arg,
+                    'index': {'type': 'int', 'value': j, 'pseudo_type': 'Int'},
+                    'pseudo_type': t
+                } 
+                for j, t
+                in enumerate(many_arg['pseudo_type'][1:])]
+            else:
+                raise translation_error("pseudo-python supports <call>(..*args) only for Tuple *args, because otherwise it doesn't know the exact arg count at compile time",
+                        location, self.lines[location[0]],
+                        wrong_type=many_arg['pseudo_type'])
 
+
+
+        if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
+            if func.id in ['any', 'all', 'sum']:
+                if len(args) != 1:
+                    raise translation_error('%s expected 1 arg, not %d' % (func.id, len(args)),
+                            location, self.lines[location[0]])
+                elif isinstance(args[0], ast.ListComp):
+                    raise translation_error('%s expects a generator expression, not a list comprehension' % func.id,
+                            location, self.lines[location[0]])
+                elif isinstance(args[0], ast.GeneratorExp):
+                    return self._translate_generatorexp(args[0].generators, args[0].elt, func.id, location)
+                else:
+                    arg_node = self._translate_node(args[0])
+                    if func.id != 'sum':
+                        if arg_node['pseudo_type'] != ['List', 'Boolean']:
+                            raise type_check_error('%s expected List[Boolean]' % func.id,
+                                location,
+                                self.lines[location[0]],
+                                wrong_type=arg_node['pseudo_type'])
+                        message = 'boolean_%s?' % func.id
+                        return {
+                            'type': 'standard_method_call',
+                            'receiver': arg_node,
+                            'message': message,
+                            'args': [],
+                            'pseudo_type': 'Boolean'
+                        }
+                    else:
+                        if arg_node['pseudo_type'] != ['List', 'Int'] and arg_node['pseudo_type'] != ['List', 'Float']:
+                            raise type_check_error('%s expected List[Int] / List[Float]' % func.id,
+                                location,
+                                self.lines[location[0]],
+                                wrong_type=arg_node['pseudo_type'])
+                        message = func.id
+                        _type = arg_node['pseudo_type'][1]
+                        initial = 0.0 if _type == 'Float' else 0
+
+                        return {
+                            'type': 'standard_method_call',
+                            'receiver': arg_node,
+                            'message': 'reduce',
+                            'args': [{
+                                'type': 'anonymous_function',
+                                'params': ['memo', 'value'],
+                                'pseudo_type': ['Function', _type, _type, _type],
+                                'return_type': _type,
+                                'block': [{
+                                    'type': 'binary_op',
+                                    'op': '+',
+                                    'left': {'type': 'local', 'name': 'memo', 'pseudo_type': _type},
+                                    'right': {'type': 'local', 'name': 'value', 'pseudo_type': _type},
+                                    'pseudo_type': 'Boolean'
+                                }]
+                            }, {
+                                'type': _type.lower(),
+                                'value': initial,
+                                'pseudo_type': _type
+                            }],
+                            'pseudo_type': _type
+                        }
+
+            else:
+                arg_nodes = self._translate_node(args)
+                return self._translate_builtin_call('global', func.id, arg_nodes, location)
+
+        arg_nodes = self._translate_node(args)
         func_node = self._translate_node(func, in_call=True)
 
         # print('CALL CALL ', func_node, arg_nodes[:1])
@@ -454,7 +533,7 @@ class ASTTranslator:
                 'pseudo-python doesn\'t support %s%s with %d args' % (namespace, function, len(args)),
                 location, self.lines[location[0]])
 
-    def _translate_builtin_method_call(self, class_type, base, message, args):
+    def _translate_builtin_method_call(self, class_type, base, message, args, location):
         if class_type not in METHOD_API:
             raise translation_error(
                 "pseudo-python doesn't support %s" % class_type,
@@ -469,12 +548,12 @@ class ASTTranslator:
                 location, self.lines[location[0]],
                 suggestions='pseudo-python supports those %s methods:\n%s' % (
                     PSEUDON_BUILTIN_TYPES[class_type],
-                    prepare_table(TYPED_API[class_type]).strip()))
+                    prepare_table(TYPED_API[class_type], ORIGINAL_METHODS.get(class_type)).strip()))
 
         if isinstance(api, Standard):
             return api.expand([base] + args)
         else:
-            for count,(a, b)  in api.items():
+            for count, b  in api.items():
                 if len(args) == count:
                     return b.expand([base] + args)
             raise translation_error(
@@ -490,8 +569,8 @@ class ASTTranslator:
         node_args = node.args.args if z == 'functions' else node.args.args[1:]
 
         if args is not None and len(node_args) != len(args):
-            raise translation_error('%s expecting %d args' % (node.name, len(node_args)),
-                location, self.lines[location[0]])
+            raise translation_error('%s expecting %d, got %d args' % (node.name, len(node_args), len(args)),
+                (node.lineno, node.col_offset), self.lines[node.lineno])
 
         if z not in self._translated:
             self._translated[z] = set()
@@ -622,12 +701,16 @@ class ASTTranslator:
             }
         elif isinstance(op, ast.Not):
             value_node = self._testable(self._translate_node(value))
-            return {
-                'type': 'unary_op',
-                'op': 'not',
-                'value': value_node,
-                'pseudo_type': 'Boolean'
-            }
+            if value_node.type == 'standard_method_call' and value_node.message == 'present?':
+                value_node.message = 'empty?'
+                return value_node
+            else:
+                return {
+                    'type': 'unary_op',
+                    'op': 'not',
+                    'value': value_node,
+                    'pseudo_type': 'Boolean'
+                }
         else:
             raise translation_error('no support for %s as an unary op' % type(op).__name__,
                 location, self.lines[location[0]],
@@ -686,7 +769,7 @@ class ASTTranslator:
         self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'], location)
 
         result = {
-            'type': 'binary_op',
+            'type': 'comparison',
             'op':   op,
             'left': left_node,
             'right': right_node,
@@ -695,15 +778,20 @@ class ASTTranslator:
         if len(comparators) == 1:
             return result
         else:
-            result = [result]
             for r in comparators[1:]:
                 left_node, right_node = right_node, self._translate_node(r)
                 self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'], location)
                 result = {
                     'type': 'binary_op',
                     'op': 'and',
-                    'left': left_node,
-                    'right': result,
+                    'left': result,
+                    'right': {
+                        'type': 'comparison',
+                        'op': op,
+                        'left': left_node,
+                        'right': right_node,
+                        'pseudo_type': 'Boolean'
+                    },
                     'pseudo_type': 'Boolean'
                 }
             return result
@@ -734,13 +822,22 @@ class ASTTranslator:
                 wrong='h = (2, H())\nh.hm')
 
         if value_node['pseudo_type'] == 'library':
-            return {
-                'type': 'library_function',
-                'library': value_node['name'],
-                'function': attr,
-                'pseudo_type': 'library'
-            }
-
+            if value_node['name'] == 'sys' and attr == 'argv':
+                return {
+                    'type': 'standard_call',
+                    'namespace': 'system',
+                    'function': 'args',
+                    'args': [],
+                    'pseudo_type': ['List', 'String'],
+                    'special': None
+                }
+            else:
+                return {
+                    'type': 'library_function',
+                    'library': value_node['name'],
+                    'function': attr,
+                    'pseudo_type': 'library'
+                }
         else:
             value_general_type = self._general_type(value_node['pseudo_type'])
             attr_type = self._attr_index.get(value_general_type, {}).get(attr)
@@ -763,7 +860,7 @@ class ASTTranslator:
                         location, self.lines[location[0]],
                         suggestions='pseudo-python knows about those %s methods:\n%s' % (
                             show_type,
-                            prepare_table(self.type_env.top[value_general_type])))
+                            prepare_table(self.type_env.top[value_general_type], ORIGINAL_METHODS.get(value_general_type))))
 
             else:
                 attr_type = attr_type[0]['pseudo_type']
@@ -927,8 +1024,8 @@ class ASTTranslator:
         test_node = self._testable(self._translate_node(test))
         block = self._translate_node(body)
         #block [self._translate_node(child) for child in body]
-        if isinstance(orelse, ast.If):
-            otherwise = self._translate_if(orelse.test, orelse.orelse, orelse.body, False)
+        if orelse and len(orelse) == 1 and isinstance(orelse[0], ast.If):
+            otherwise = self._translate_if(orelse[0].test, orelse[0].orelse, orelse[0].body, location, False)
         elif orelse:
             otherwise = {
                 'type': 'else_statement',
@@ -963,17 +1060,11 @@ class ASTTranslator:
         if t != TESTABLE_TYPE:
             if t in TYPES_WITH_LENGTH:
                 return {
-                    'type': 'comparison',
-                    'pseudo_type': 'Boolean',
-                    'op': '>',
-                    'left': {
-                        'type': 'standard_method_call',
-                        'pseudo_type': 'Int',
-                        'receiver': test_node,
-                        'message': 'length',
-                        'args': []
-                    },
-                    'right': {'type': 'int', 'pseudo_type': 'Int', 'value': 0}
+                    'type': 'standard_method_call',
+                    'receiver': test_node,
+                    'message': 'present?',
+                    'args': [],
+                    'pseudo_type': 'Boolean'
                 }
             elif t in NUMBER_TYPES:
                 return {
@@ -1002,6 +1093,7 @@ class ASTTranslator:
         # but not for Num.
         # that's possibly genius, inconsisten consistent fucking genius, 
         # thank you python ast (almost wishing I've used redbaron)
+        base = 'slice' if receiver['pseudo_type'] != 'String' else 'substr'
         if upper:
             upper_node = self._translate_node(upper)
             self._confirm_index(upper_node['pseudo_type'], 'Int', getattr(upper, 'location', location), 'slice index')
@@ -1009,13 +1101,13 @@ class ASTTranslator:
             lower_node = self._translate_node(lower)
             self._confirm_index(lower_node['pseudo_type'], 'Int', getattr(lower, 'location', location), 'slice index')
         if upper and lower:
-            name = 'slice'
+            name = base
             values = [lower_node, upper_node]
         elif upper:
-            name = 'slice_to'
+            name = '%s_to' % base
             values = [upper_node]
         elif lower:
-            name = 'slice_from'
+            name = '%s_from' % base
             values = [lower_node]
         else:
             name = 'slice_'
@@ -1128,6 +1220,18 @@ class ASTTranslator:
             else:
                 pseudo_type = value_node['pseudo_type'][2]
 
+            if 'special' in value_node: # sys.argv[index]
+                if z['pseudo_type'] != 'Int':
+                    raise type_check_error('pseudo-python supports only int indices for sys.argv',
+                        location, self.lines[location[0]],
+                        wrong_type=z['pseudo_type'])
+                return {
+                    'type': 'standard_call',
+                    'namespace': 'system',
+                    'function': 'index',
+                    'args': [z],
+                    'pseudo_type': 'String'
+                }
             result = {
                 'type': 'index',
                 'sequence': value_node,
@@ -1252,6 +1356,69 @@ class ASTTranslator:
         sketchup['block'] = [elt_node]
         sketchup['pseudo_type'] = ['List', elt_node['pseudo_type']]
         return sketchup
+
+    def _translate_generatorexp(self, generators, elt, x, location):
+        if len(generators) != 1 or generators[0].ifs or not isinstance(generators[0].target, ast.Name):
+            raise translation_error('support for more complicated generator expressions in v0.4',
+                location, self.lines[location[0]])
+
+        iter_node = self._translate_node(generators[0].iter)
+        if not isinstance(iter_node['pseudo_type'], list) or iter_node['pseudo_type'][0] != 'List':
+            raise type_check_error('generator expression expected a List sequence, not %s' % serialize_type(iter_node['pseudo_type']),
+                location, self.lines[location[0]])
+        elt_type = iter_node['pseudo_type'][1]
+        self.type_env = self.type_env.child_env()
+        self.type_env[generators[0].target.id] = elt_type
+        old_function, self.function_name = self.function_name, 'generator expr'
+        block = self._translate_node(elt)
+        self.function_name = old_function
+        self.type_env = self.type_env.parent
+            
+        # x can be 'any' 'all' or 'sum'
+        if x == 'any' or x == 'all':
+            return {
+                'type': 'standard_method_call',
+                'receiver': iter_node,
+                'message': '%s?' % x,
+                'args': [{
+                    'type': 'anonymous_function',
+                    'params': [generators[0].target.id],
+                    'block': [self._testable(block)],
+                    'pseudo_type': ['Function', elt_type, 'Boolean'],
+                    'return_type': 'Boolean'
+                }],
+                'pseudo_type': 'Boolean'
+            }
+        else: # sum
+            if block['pseudo_type'] != 'Int' and block['pseudo_type'] != 'Float':
+                raise type_check_error('sum expected a generator expression producing Int / Float',
+                            location, self.lines[location[0]],
+                            wrong_type=block['pseudo_type'])
+
+            initial = 0.0 if block['pseudo_type'] == 'Float' else 0
+            return {
+                'type': 'standard_method_call',
+                'receiver': iter_node,
+                'message': 'reduce',
+                'args': [{
+                    'type': 'anonymous_function',
+                    'params': ['memo', generators[0].target.id],
+                    'block': [{
+                        'type': 'binary_op',
+                        'op': '+',
+                        'left': {'type': 'local', 'name': 'memo', 'pseudo_type': block['pseudo_type']},
+                        'right': block,
+                        'pseudo_type': block['pseudo_type']
+                    }],
+                    'return_type': block['pseudo_type'],
+                    'pseudo_type': ['Function', block['pseudo_type'], elt_type, block['pseudo_type']],
+                }, {
+                    'type': block['pseudo_type'].lower(),
+                    'value': initial,
+                    'pseudo_type': block['pseudo_type']
+                }],
+                'pseudo_type': block['pseudo_type']
+            }
 
     def _translate_iter(self,target, k):
         # fix short names when not 5 am

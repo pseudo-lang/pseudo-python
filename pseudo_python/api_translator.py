@@ -1,8 +1,8 @@
 from pseudo_python.builtin_typed_api import builtin_type_check
 
 class Standard:
-    ''' 
-    Standard classes should respond to expand and to return 
+    '''
+    Standard classes should respond to expand and to return
     valid nodes on expand
     '''
     pass
@@ -27,17 +27,21 @@ class StandardMethodCall(Standard):
     '''
     converts to a method call of the same class
     '''
-    def __init__(self, type, message, expander=None):
+    def __init__(self, type, message, default=None, expander=None):
         self.type = type
         self.message = message
+        self.default = default
         self.expander = expander
 
     def expand(self, args):
+        if self.default and len(args) - 1 in self.default:
+            args += self.default[len(args) - 1]
         if not self.expander:
             q = builtin_type_check(self.type, self.message, args[0], args[1:])[-1]
             return {'type': 'standard_method_call', 'receiver': args[0], 'message': self.message, 'args': args[1:], 'pseudo_type': q}
         else:
             return self.expander(self.type, self.message, args)
+
 
 class StandardRegex(Standard):
     '''
@@ -50,10 +54,8 @@ class StandardRegex(Standard):
         else:
             return {'type': 'standard_call', 'namespace': 'regexp', 'function': 'compile', 'args': [args[0]], 'pseudo_type': 'Regexp'}
 
+
 class StandardSwapper(Standard):
-    '''
-    swaps
-    '''
     def __init__(self, type, message):
         self.type = type
         self.message = message
@@ -62,22 +64,31 @@ class StandardSwapper(Standard):
         q = builtin_type_check(self.type, self.message, args[1], [args[0]])[-1]
         return {'type': 'standard_method_call', 'receiver': args[1], 'args': [args[0]], 'message': self.message, 'pseudo_type': q}
 
+def to_int_expander(type, message, args):
+    return len_expander(type, message, args)
+
 def len_expander(type, message, args):
     receiver_type = args[0]['pseudo_type']
-    if isinstance(receiver_type, tuple):
+    if isinstance(receiver_type, list):
         a = receiver_type[0]
     else:
         a = receiver_type
-    q = builtin_type_check(a, message, args[0], args[1:])
-    return {'type': 'standard_method_call', 'receiver': args[0], 'message': message, 'args': [], 'pseudo_type': q[-1]}
-    
+    # print(a, message, args[0], args[1:])
+    # input(0)
+    if message == 'length' and 'special' in args[0]: # len(sys.argv)
+        return {'type': 'standard_call', 'namespace': 'system', 'function': 'arg_count', 'args': [], 'pseudo_type': 'Int'}
+    else:
+        q = builtin_type_check(a, message, args[0], args[1:])
+        return {'type': 'standard_method_call', 'receiver': args[0], 'message': message, 'args': [], 'pseudo_type': q[-1]}
+
 
 FUNCTION_API = {
     'global': {
         'input':    StandardCall('io', 'read'),
         'print':    StandardCall('io', 'display'),
         'str':      StandardCall('global', 'to_string'),
-        'len':      StandardMethodCall('List', 'length', len_expander)
+        'len':      StandardMethodCall('List', 'length', expander=len_expander),
+        'int':      StandardMethodCall('String', 'to_int', expander=to_int_expander)
     },
 
     'math': {
@@ -101,8 +112,16 @@ FUNCTION_API = {
 
 METHOD_API = {
     'String': {
-        'split':    StandardMethodCall('String', 'split'),
-        'join':     StandardSwapper('List', 'join')
+        'split':      StandardMethodCall('String', 'split'),
+        'join':       StandardSwapper('List', 'join'),
+        'upper':      StandardMethodCall('String', 'upper'),
+        'lower':      StandardMethodCall('String', 'lower'),
+        'title':      StandardMethodCall('String', 'title'),
+        'center':     StandardMethodCall('String', 'justify', default={1: [{'type': 'string', 'value': ' ', 'pseudo_type': 'String'}]}),
+        'index':      {
+            1:        StandardMethodCall('String', 'find'),
+            2:        StandardMethodCall('String', 'find_from')
+        }
     },
     'List': {
         'append':   StandardMethodCall('List', 'push'),
@@ -111,7 +130,8 @@ METHOD_API = {
             1:      StandardMethodCall('List', 'insert'),
             2:      StandardMethodCall('List', 'insert_at')
         },
-        'remove':   StandardMethodCall('List', 'remove')
+        'remove':   StandardMethodCall('List', 'remove'),
+        'extend':   StandardMethodCall('List', 'push_many')
     },
 
     'Dictionary': {
@@ -142,7 +162,7 @@ METHOD_API = {
 
 OPERATOR_API = {
     'List':  {
-        '+':    'push_many',
+        '+':    'concat',
         '*':    'repeat'
     },
     'Set':  {
@@ -151,7 +171,7 @@ OPERATOR_API = {
         '^':    'symmetric_diff',
         '-':    'diff'
     },
-    'String': { 
+    'String': {
         '+':    'concat',
         '*':    'repeat',
         '%':    'c_format'

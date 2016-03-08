@@ -166,6 +166,10 @@ TYPED_API = {
         'write_file':  ['String', 'String', 'Void']
     },
 
+    'system': {
+        'args':         [['List', 'String']]
+    },
+
     'regexp': {
         'compile':      ['String', 'Regexp'],
         'escape':       ['String', 'String']
@@ -194,19 +198,31 @@ TYPED_API = {
         'push':       ['@t', 'Void'],
         'pop':        ['@t'],
         'insert':     ['@t', 'Void'],
-        'insert_at':  ['@t', 'Int', 'Void']
+        'insert_at':  ['@t', 'Int', 'Void'],
+        'concat':     [['List', '@t'], ['List', '@t']],
+        'repeat':     ['Int', ['List', '@t']],
+        'push_many':  [['List', '@t'], 'Void'],
+        'remove':     ['@t', 'Void'],
+        'length':     ['Int']
     },
 
     'Dictionary': {
         'keys':       ['List', '@k'],
-        'values':     ['List', '@v']
+        'values':     ['List', '@v'],
+        'length':     ['Int']
     },
     'String': {
         'find':       ['String', 'Int'],
-        'ljust':      ['Int', 'String', 'String'],
+        'to_int':     ['Int'],
         'join':       [['List', 'String'], 'String'],
         'split':      ['String', ['List', 'String']],
-        '%':          [['Array', 'String'], 'String']
+        'c_format':   [['Array', 'String'], 'String'],
+        'upper':      ['String'],
+        'lower':      ['String'],
+        'title':      ['String'],
+        'center':     ['Int', 'String', 'String'],
+        'find_from':  ['String', 'Int', 'Int'],
+        'length':     ['Int'],
     },
     'Set': {
         '|':           [['Set', '@t'], ['Set', '@t']],
@@ -216,24 +232,25 @@ TYPED_API = {
         '^':           [['Set', '@t'], ['Set', '@t']],
         '-':           [['Set', '@t'], ['Set', '@t']]
     },
-
+    'Int': {'to_int': ['Int'], 'to_float': ['Float']},
+    'Float': {'to_int': ['Int'], 'to_float': ['Float']},
     'Array': {
+        'length':      ['Int'],
         'index':       ['@t', 'Int'],
         'count':       ['@t', 'Int']
     },
 
     'Tuple': {
-
+        'length':       ['Int']
     },
 
     'Regexp': {
         'match':        ['String', 'RegexpMatch'],
-        'find_all':     [['String']]
+        'groups':       ['String', ['String']]
     },
 
     'RegexpMatch': {
-        'group':        ['Int', 'String'],
-        'length':       ['Int']
+        'group':        ['Int', 'String']
     },
 
     '_generic_List':    ['List', '@t'],
@@ -254,4 +271,75 @@ TYPED_API = {
 
     # 'Dict#keys':       [_, 'List<@k>'],
     # 'Dict#values':     [_, 'List<@v>'],
+}
+
+# useful for error messages
+
+ORIGINAL_METHODS = {
+    'List': {
+        'push':       'append(element)',
+        'pop':        'pop',
+        'insert':     'insert(element)',
+        'insert_at':  'insert(element, index)',
+        'concat':     '+',
+        'repeat':     '*',
+        'push_many':  'extend(other)',
+        'remove':     'remove',
+        'length':     'len'
+    },
+
+    'Dictionary': {
+        'keys':       'keys',
+        'values':     'values',
+        'length':     'len'
+    },
+
+    'Int': {
+        'to_int':     'int',
+        'to_float':   'float'
+    },
+    'Float': {
+        'to_int':     'int',
+        'to_float':   'float'
+    },
+    'String': {
+        'find':       'index(substring)',
+        'join':       'join(elements)',
+        'split':      'split(delimiter)',
+        'c_format':   '%',
+        'format':     'format(*elements)',
+        'upper':      'upper',
+        'lower':      'lower',
+        'title':      'title',
+        'center':     'center',
+        'find_from':  'index(substring, index)',
+        'to_int':     'int'
+    },
+    'Set': {
+        '|':           '|',
+        'add':         'add(element)',
+        'remove':      'remove(element)',
+        '&':           '&',
+        '^':           '^',
+        '-':           '-'
+    },
+
+    'Array': {
+        'length':      'len',
+        'find':        'find(element)',
+        'count':       'count(element)'
+    },
+
+    'Tuple': {
+        'length':       'len'
+    },
+
+    'Regexp': {
+        'match':        'match(value)',
+        'groups':       'find_all(value)'
+    },
+
+    'RegexpMatch': {
+        'group':        'group(z)'
+    }
 }
