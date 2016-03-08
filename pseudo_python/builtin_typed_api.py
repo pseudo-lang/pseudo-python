@@ -17,6 +17,7 @@ _ = ()
 # for different methods in the same type env to reference and update the same signature
 # that helps us with inherited methods: each one updates the type signature for the whole hierarchy
 
+
 def builtin_type_check(namespace, function, receiver, args):
     fs = TYPED_API[namespace]
     if fs == 'library':
@@ -59,6 +60,8 @@ def simplify(kind, generics):
             return kind
     else:
         return [simplify(child, generics) for child in kind]
+
+# refactoring here in future
 
 def add(l, r):
     if l == 'Float' and r in ['Float', 'Int']  or r == 'Float' and l in ['Float', 'Int']:
@@ -116,6 +119,37 @@ def mod(l, r):
     else:
         raise PseudoPythonTypeCheckError("wrong types for %: %s and %s" % (serialize_type(l), serialize_type(r)))
 
+def and_(l, r):
+    if l == 'Boolean' and r == 'Boolean':
+        return 'Boolean'
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for and: %s and %s" % (serialize_type(l), serialize_type(r)))
+
+def or_(l, r):
+    if l == 'Boolean' and r == 'Boolean':
+        return 'Boolean'
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for or: %s and %s" % (serialize_type(l), serialize_type(r)))        
+
+def binary_and(l, r):
+    if l == r == 'Int' or l == r == 'Set':
+        return l
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for &: %s and %s" % (serialize_type(l), serialize_type(r)))
+
+def binary_or(l, r):
+    if l == r == 'Int' or l == r == 'Set':
+        return l
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for |: %s and %s" % (serialize_type(l), serialize_type(r)))
+
+def xor_(l, r):
+    if l == r == 'Int' or l == r == 'Set':
+        return l
+    else:
+        raise PseudoPythonTypeCheckError("wrong types for ^: %s and %s" % (serialize_type(l), serialize_type(r)))
+
+
 # for template types as list, dict @t is the type of list arg and @k, @v of dict args
 TYPED_API = {
     # methods
@@ -149,7 +183,11 @@ TYPED_API = {
         '*': mul,
         '/': div,
         '**': pow_,
-        '%': mod
+        '%': mod,
+
+        '&':   binary_and,
+        '|':   binary_or,
+        '^':   xor_
     },
     
     'List': {

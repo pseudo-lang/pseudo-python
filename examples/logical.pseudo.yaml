@@ -1,0 +1,130 @@
+constants: []
+custom_exceptions: []
+definitions: []
+dependencies: []
+main:
+- pseudo_type: Void
+  target: {name: e, pseudo_type: Int, type: local}
+  type: assignment
+  value: {pseudo_type: Int, type: int, value: 4}
+- block:
+  - args:
+    - {name: e, pseudo_type: Int, type: local}
+    function: display
+    namespace: io
+    pseudo_type: Void
+    type: standard_call
+  otherwise: null
+  pseudo_type: Void
+  test:
+    left: {name: e, pseudo_type: Int, type: local}
+    op: '>'
+    pseudo_type: Boolean
+    right: {pseudo_type: Int, type: int, value: 0}
+    type: comparison
+  type: if_statement
+- block:
+  - args:
+    - {name: e, pseudo_type: Int, type: local}
+    function: display
+    namespace: io
+    pseudo_type: Void
+    type: standard_call
+  otherwise: null
+  pseudo_type: Void
+  test:
+    op: not
+    pseudo_type: Boolean
+    type: unary_op
+    value:
+      left: {name: e, pseudo_type: Int, type: local}
+      op: '>'
+      pseudo_type: Boolean
+      right: {pseudo_type: Int, type: int, value: 0}
+      type: comparison
+  type: if_statement
+- block:
+  - args:
+    - {name: e, pseudo_type: Int, type: local}
+    function: display
+    namespace: io
+    pseudo_type: Void
+    type: standard_call
+  otherwise: null
+  pseudo_type: Void
+  test:
+    left: {name: e, pseudo_type: Int, type: local}
+    op: '>='
+    pseudo_type: Boolean
+    right: {pseudo_type: Int, type: int, value: 2}
+    type: binary_op
+  type: if_statement
+- block:
+  - args:
+    - {name: e, pseudo_type: Int, type: local}
+    function: display
+    namespace: io
+    pseudo_type: Void
+    type: standard_call
+  otherwise: null
+  pseudo_type: Void
+  test:
+    left: {name: e, pseudo_type: Int, type: local}
+    op: '!='
+    pseudo_type: Boolean
+    right: {pseudo_type: Int, type: int, value: 0}
+    type: binary_op
+  type: if_statement
+- block:
+  - args:
+    - {pseudo_type: Int, type: int, value: 2}
+    function: display
+    namespace: io
+    pseudo_type: Void
+    type: standard_call
+  otherwise: null
+  pseudo_type: Void
+  test:
+    left:
+      left: {name: e, pseudo_type: Int, type: local}
+      op: '>'
+      pseudo_type: Boolean
+      right: {pseudo_type: Int, type: int, value: 0}
+      type: comparison
+    op: and
+    pseudo_type: Boolean
+    right:
+      left: {pseudo_type: Int, type: int, value: 4}
+      op: '>'
+      pseudo_type: Boolean
+      right: {pseudo_type: Int, type: int, value: 0}
+      type: comparison
+    type: binary_op
+  type: if_statement
+- block:
+  - args:
+    - {pseudo_type: Int, type: int, value: 2}
+    function: display
+    namespace: io
+    pseudo_type: Void
+    type: standard_call
+  otherwise: null
+  pseudo_type: Void
+  test:
+    left:
+      left: {name: e, pseudo_type: Int, type: local}
+      op: ==
+      pseudo_type: Boolean
+      right: {pseudo_type: Int, type: int, value: 2}
+      type: binary_op
+    op: or
+    pseudo_type: Boolean
+    right:
+      left: {pseudo_type: Int, type: int, value: 4}
+      op: '>'
+      pseudo_type: Boolean
+      right: {pseudo_type: Int, type: int, value: 0}
+      type: comparison
+    type: binary_op
+  type: if_statement
+type: module

@@ -51,13 +51,22 @@ PSEUDO_OPS = {
     ast.Sub: '-',
     ast.Div: '/',
     ast.Mult: '*',
-    ast.And: 'and',
     ast.Pow: '**',
 
     ast.Eq: '==',
     ast.Lt: '<',
     ast.Gt: '>',
-    ast.Mod: '%'
+    ast.LtE: '<=',
+    ast.GtE: '>=',
+    ast.NotEq: '!=',
+    ast.Mod: '%',
+
+    ast.And: 'and',
+    ast.Or:  'or',
+    ast.Not: 'not',
+    ast.BitAnd: '&',
+    ast.BitOr: '|',
+    ast.BitXor: '^'
 }
 
 
@@ -85,6 +94,8 @@ class ASTTranslator:
         self._imports = set()
         self._typing_imports = set()
         self.current_class = None
+        self._tuple_assigned = []
+        self._tuple_used = []
         self.function_name = 'top level'
         self.type_env['functions'] = {}
         self._translate_top_level(self.tree)
@@ -128,7 +139,7 @@ class ASTTranslator:
     def _translate_main(self):
         self.current_class = None
         self.function_name = 'global scope'
-        return list(map(self._translate_node, self.main))
+        return self._translate_node(self.main)
 
     def _translate_top_level(self, node):
         nodes = node.body
@@ -264,7 +275,14 @@ class ASTTranslator:
                 fields['in_call'] = in_call
             return getattr(self, '_translate_%s' % type(node).__name__.lower())(**fields)
         elif isinstance(node, list):
-            return [self._translate_node(n) for n in node]
+            results = []
+            for n in node:
+                x = self._translate_node(n)
+                if isinstance(x, list):
+                    results.extend(x)
+                else:
+                    results.append(x)
+            return results
         elif isinstance(node, dict):
             return {k: self._translate_node(v) for k, v in node.items()}
         else:
@@ -298,7 +316,12 @@ class ASTTranslator:
             if id == 'self':
                 return {'type': 'this', 'pseudo_type': id_type}
             else:
-                return {'type': 'local', 'name': id, 'pseudo_type': id_type}
+                z = {'type': 'local', 'name': id, 'pseudo_type': id_type}
+                if z in self._tuple_assigned:
+                    if not any(a[0] == '_old_%s' % id for a in self._tuple_used):
+                        self._tuple_used.append(('_old_%s' % id, z))
+                    z = {'type': 'local', 'name': '_old_%s' % id, 'pseudo_type': id_type}
+                return z
 
     def _translate_call(self, func, args, keywords, starargs, kwargs, location):
         self.assert_translatable('call', keywords=([], keywords), starargs=(None, starargs), kwargs=(None, kwargs))
@@ -308,7 +331,7 @@ class ASTTranslator:
 
         func_node = self._translate_node(func, in_call=True)
 
-        print('CALL CALL ', func_node, arg_nodes[:1])
+        # print('CALL CALL ', func_node, arg_nodes[:1])
         if func_node['type'] == 'attr':
             if func_node['object']['pseudo_type'] == 'library': # math.log
                 return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes, location)
@@ -504,7 +527,11 @@ class ASTTranslator:
         for j, child in enumerate(node.body):
             if j == len(node.body) - 1:
                 self.is_last = True
-            children.append(self._translate_node(child))
+            child_ = self._translate_node(child)
+            if isinstance(child_, list):
+                children.extend(child_)
+            else:
+                children.append(child_)
             # print(args);input()
         self.function_name = outer_function_name
         self.current_class = outer_current_class
@@ -579,7 +606,79 @@ class ASTTranslator:
                 'pseudo_type': binop_type
             }
 
+    def _translate_unaryop(self, operand, op, location):
+        value = operand
+        if isinstance(op, ast.USub):
+            value_node = self._translate_node(value)
+            if value_node.pseudo_type != 'Int' and value_node.pseudo_type != 'Float':
+                raise type_check_error('- expects Int or Float', 
+                    location, self.lines[location[0]],
+                    wrong_type=value_node.pseudo_type)
+            return {
+                'type': 'unary_op',
+                'op': '-',
+                'value': value_node,
+                'pseudo_type': value_node.pseudo_type
+            }
+        elif isinstance(op, ast.Not):
+            value_node = self._testable(self._translate_node(value))
+            return {
+                'type': 'unary_op',
+                'op': 'not',
+                'value': value_node,
+                'pseudo_type': 'Boolean'
+            }
+        else:
+            raise translation_error('no support for %s as an unary op' % type(op).__name__,
+                location, self.lines[location[0]],
+                suggestions='not and - are supported')
+
+
+    def _translate_boolop(self, op, values, location):
+        op = PSEUDO_OPS[type(op)]
+        right_node = self._testable(self._translate_node(values[0]))
+        result = right_node
+        for r in values[1:]:
+            left_node, right_node = right_node, self._testable(self._translate_node(r))
+            result = {
+                'type': 'binary_op',
+                'op':   op,
+                'left': result,
+                'right': right_node,
+                'pseudo_type': left_node['pseudo_type']
+            }
+        return result
+
+    def _translate_in(self, element, sequence, location):
+        sequence_node = self._translate_node(sequence)
+        element_node = self._translate_node(element)
+        if not (
+            sequence_node['pseudo_type'] == 'String' and element_node['pseudo_type'] == 'String' or\
+            isinstance(sequence_node['pseudo_type'], list) and sequence_node['pseudo_type'][0] != 'Tuple' and sequence_node['pseudo_type'][1] == element_node['pseudo_type']):
+            raise type_check_error('expected the left side of in to has the element type of the sequence, in supported for string and sequences which are not tuples',
+                    location, self.lines[location[0]],
+                    wrong_type=element_node['pseudo_type'])
+        return {
+            'type': 'standard_method_call',
+            'receiver': sequence_node,
+            'message': 'include?',
+            'args': [element_node],
+            'pseudo_type': 'Boolean'
+        }
+
     def _translate_compare(self, left, ops, comparators, location):
+        if isinstance(ops[0], ast.In) or isinstance(ops[0], ast.NotIn):
+            if len(comparators) != 1:
+                raise translation_error('only <element> [not] in <sequence> supported', 
+                    location, self.lines[location[0]],
+                    suggestion='2 in [2] in [[2]] is cute, but it\'s not supported')
+            else:
+                in_node = self._translate_in(left, comparators[0], location)
+                if isinstance(ops[0], ast.In):
+                    return in_node
+                else:
+                    return {'type': 'unary_op', 'op': 'not', 'value': in_node, 'pseudo_type': 'Boolean'}
+
         op = PSEUDO_OPS[type(ops[0])]
         right_node = self._translate_node(comparators[0])
         left_node = self._translate_node(left)
@@ -670,25 +769,71 @@ class ASTTranslator:
                 attr_type = attr_type[0]['pseudo_type']
 
             if value_node['type'] == 'this':
-                return {
+                result = {
                     'type': 'instance_variable',
                     'name': attr,
                     'pseudo_type': attr_type
                 }
+                if result in self._tuple_assigned:
+                    if not any(a[0] == '_old_self_%s' % attr for a in self._tuple_used):
+                        self._tuple_used.append(('_old_self_%s' % attr, result))
+                
+
+                    result = {'type': 'local', 'name': '_old_self_%s' % attr, 'pseudo_type': attr_type}
+                return result
             else:
-                return {
+                result = {
                     'type': 'attr',
                     'object': value_node,
                     'attr': attr,
                     'pseudo_type': attr_type
                 }
+                if result in self._tuple_assigned:
+                    if not any(a[0] == '_old_%s' % attr for a in self._tuple_used):
+                        self._tuple_used.append(('_old_%s' % attr, result))
+                    result = {'type': 'local', 'name': '_old_%s' % attr, 'pseudo_type': attr_type}
+                return result
 
     def _translate_assign(self, targets, value, location):
         if isinstance(value, ast.AST):
             value_node = self._translate_node(value)
         else:
             value_node = value
-        if isinstance(targets[0], ast.Name):
+        if isinstance(targets[0], ast.Tuple):
+            if not isinstance(value, ast.Tuple):
+                raise translation_error(
+                    'multiple return values assignment will be supported in v0.4',
+                    location, self.lines[location[0]])
+            
+            if len(targets[0].elts) != len(value.elts):
+                raise translation_error(
+                    'expected %d number of values on right' % len(targets[0].elts),
+                    location, self.lines[location[0]])
+            
+            rights = []
+            used = []
+            u = 0
+            for t, child in zip(targets[0].elts, value.elts):
+                child_node = self._translate_node(child)
+                x = self._translate_node(t)
+                for a in self._tuple_used[u:]:
+                    used.append({
+                        'type': 'assignment',
+                        'target': {'type': 'local', 'name': a[0], 'pseudo_type': a[1]['pseudo_type']},
+                        'value': a[1],
+                        'pseudo_type': 'Void'
+                    })
+                    self.type_env[a[0]] = a[1]['pseudo_type']
+                u = len(self._tuple_used)
+                rights.append(
+                    self._translate_assign([t], child_node, location))
+                self._tuple_assigned.append(rights[-1]['target'])
+            
+            self._tuple_assigned = []
+            self._tuple_used = []
+            return used + rights
+
+        elif isinstance(targets[0], ast.Name):
             name = targets[0].id
             e = self.type_env[name]
             if e:
@@ -780,13 +925,15 @@ class ASTTranslator:
 
     def _translate_if(self, test, orelse, body, location, base=True):
         test_node = self._testable(self._translate_node(test))
-        block = [self._translate_node(child) for child in body]
+        block = self._translate_node(body)
+        #block [self._translate_node(child) for child in body]
         if isinstance(orelse, ast.If):
             otherwise = self._translate_if(orelse.test, orelse.orelse, orelse.body, False)
         elif orelse:
             otherwise = {
                 'type': 'else_statement',
-                'block': [self._translate_node(node) for node in orelse],
+                'block': self._translate_node(orelse),
+                #block [self._translate_node(node) for node in orelse],
                 'pseudo_type': 'Void'
             }
         else:
@@ -806,7 +953,8 @@ class ASTTranslator:
         return {
             'type': 'while_statement',
             'test': test_node,
-            'block': [self._translate_node(node) for node in body],
+            'block': self._translate_node(body),
+            #block [self._translate_node(node) for node in body],
             'pseudo_type': 'Void'
         }
 
@@ -928,7 +1076,8 @@ class ASTTranslator:
         }
 
     def _translate_elements(self, elements, kind, homogeneous=True):
-        element_nodes = [self._translate_node(elements[0])]
+        element_nodes = self._translate_node([elements[0]])
+        #block [self._translate_node(elements[0])]
         element_type = element_nodes[0]['pseudo_type']
         if not homogeneous:
             element_types = [element_type]
@@ -979,13 +1128,20 @@ class ASTTranslator:
             else:
                 pseudo_type = value_node['pseudo_type'][2]
 
-            return {
+            result = {
                 'type': 'index',
                 'sequence': value_node,
                 'index': z,
                 'pseudo_type': pseudo_type
             }
-
+            if result in self._tuple_assigned:
+                j = z.get('value', z.get('name', z.get('attr', '_x')))
+                k = value_node.get('value', value_node.get('name', value_node.get('attr', '_y')))
+                # i kno c:
+                if not any(a[0] == '_old_%s_%s' % (j, k) for a in self._tuple_used):
+                    self._tuple_used.append(('_old_%s_%s' % (j, k), result))
+                result = {'type': 'local', 'name': '_old_%s_%s' % (j, k), 'pseudo_type': pseudo_type}
+            return result                    
         else:
             return self._translate_slice(receiver=value_node, upper=slice.upper, step=slice.step, lower=slice.lower, location=location)
 
@@ -998,8 +1154,10 @@ class ASTTranslator:
         return {
             'type': 'try_statement',
             'pseudo_type': 'Void',
-            'block': [self._translate_node(node) for node in body],
-            'handlers': [self._translate_handler(handler) for handler in handlers]
+            'block': self._translate_node(body),
+            #block [self._translate_node(node) for node in body],
+            'handlers': self._translate_node(handlers)
+            #block [self._translate_handler(handler) for handler in handlers]
         }
 
     def _translate_raise(self, exc, cause, location):
@@ -1061,7 +1219,8 @@ class ASTTranslator:
             'exception': handler.type.id,
             'is_builtin': handler.type.id == 'Exception',
             'instance': handler.name,
-            'block': [self._translate_node(z) for z in handler.body]
+            'block': self._translate_node(handler.body)
+            #block [self._translate_node(z) for z in handler.body]
         }
 
     def _translate_nameconstant(self, value, location):
@@ -1247,7 +1406,7 @@ class ASTTranslator:
                 self._translate_hinted_fun(f[1], 'functions')
 
     def _translate_hinted_fun(self, f, namespace):
-        print(namespace, self.type_env[namespace])
+        # print(namespace, self.type_env[namespace])
         if isinstance(self._definition_index[namespace][f], dict):
             return
         if namespace == 'functions':
@@ -1323,7 +1482,8 @@ class ASTTranslator:
                 raise PseudoPythonTypeCheckError("pseudo-python forbirds %s shadowing a variable in for" % label)
             self.type_env[label] = value
         self.in_for = True
-        sketchup['block'] = [self._translate_node(z) for z in body]
+        sketchup['block'] = self._translate_node(body)
+        # [self._translate_node(z) for z in body]
         sketchup['type'] = 'for' + sketchup['type'] + '_statement'
         sketchup['pseudo_type'] = 'Void'
         return sketchup

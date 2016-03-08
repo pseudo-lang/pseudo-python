@@ -1,0 +1,108 @@
+constants: []
+custom_exceptions: []
+definitions:
+- block:
+  - pseudo_type: Void
+    target: {name: _old_0_a, pseudo_type: Int, type: local}
+    type: assignment
+    value:
+      index: {pseudo_type: Int, type: int, value: 0}
+      pseudo_type: Int
+      sequence:
+        name: a
+        pseudo_type: [List, Int]
+        type: local
+      type: index
+  - pseudo_type: Void
+    target:
+      index: {pseudo_type: Int, type: int, value: 0}
+      pseudo_type: Int
+      sequence:
+        name: a
+        pseudo_type: [List, Int]
+        type: local
+      type: index
+    type: assignment
+    value:
+      index: {pseudo_type: Int, type: int, value: 1}
+      pseudo_type: Int
+      sequence:
+        name: a
+        pseudo_type: [List, Int]
+        type: local
+      type: index
+  - pseudo_type: Void
+    target:
+      index: {pseudo_type: Int, type: int, value: 1}
+      pseudo_type: Int
+      sequence:
+        name: a
+        pseudo_type: [List, Int]
+        type: local
+      type: index
+    type: assignment
+    value: {name: _old_0_a, pseudo_type: Int, type: local}
+  - pseudo_type: [List, Int]
+    type: implicit_return
+    value:
+      name: a
+      pseudo_type: [List, Int]
+      type: local
+  name: x
+  params: [a]
+  pseudo_type:
+  - Function
+  - [List, Int]
+  - [List, Int]
+  return_type: [List, Int]
+  type: function_definition
+dependencies: []
+main:
+- pseudo_type: Void
+  target: {name: b, pseudo_type: Int, type: local}
+  type: assignment
+  value: {pseudo_type: Int, type: int, value: 2}
+- pseudo_type: Void
+  target: {name: a, pseudo_type: Int, type: local}
+  type: assignment
+  value: {pseudo_type: Int, type: int, value: 4}
+- pseudo_type: Void
+  target: {name: _old_b, pseudo_type: Int, type: local}
+  type: assignment
+  value: {name: b, pseudo_type: Int, type: local}
+- pseudo_type: Void
+  target: {name: b, pseudo_type: Int, type: local}
+  type: assignment
+  value: {name: a, pseudo_type: Int, type: local}
+- pseudo_type: Void
+  target: {name: a, pseudo_type: Int, type: local}
+  type: assignment
+  value: {name: _old_b, pseudo_type: Int, type: local}
+- args:
+  - {name: a, pseudo_type: Int, type: local}
+  - {name: b, pseudo_type: Int, type: local}
+  function: display
+  namespace: io
+  pseudo_type: Void
+  type: standard_call
+- args:
+  - args:
+    - elements:
+      - {pseudo_type: Int, type: int, value: 2}
+      - {pseudo_type: Int, type: int, value: 4}
+      pseudo_type: [List, Int]
+      type: list
+    function:
+      name: x
+      pseudo_type:
+      - Function
+      - [List, Int]
+      - [List, Int]
+      type: local
+    pseudo_type: [List, Int]
+    type: call
+  function: display
+  namespace: io
+  pseudo_type: Void
+  type: standard_call
+type: module
