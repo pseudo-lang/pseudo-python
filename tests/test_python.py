@@ -87,7 +87,7 @@ class TestPython(unittest.TestCase, metaclass=test_language.TestLanguage):
                 'definitions': [{
                     'type': 'function_definition',
                     'name': 'x',
-                    'params': ['a'],
+                    'params': [{'name': 'a', 'pseudo_type': 'Function', 'type': 'local'}],
                     'block': [{
                         'type': 'implicit_return',
                         'value': literal(42),
