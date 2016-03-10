@@ -60,15 +60,17 @@ often they offer suggestions, list possible fixes or right/wrong ways to write s
 ## Type inference
 
 The rules are relatively simple: currently pseudo-python infers everything
-from the usage of functions/classes, so you need to call/initialize all
-of your functions/classes (except for no-arg functions)
+from the usage of functions/classes, so has sufficient information when the program is calling/initializing all
+of its functions/classes (except for no-arg functions)
 
-Often you don't really need to do that for **all** of them, you just need
-to do it in a way that can create call graphs covering all of them 
-(e.g. often you'll have `a` calling `b` calling `x` and you only need to 
-have an `a` invocation in your source)
+Often you don't really need to do that for **all** of them, you just need to do it in a way that can create call graphs covering all of them  (e.g. often you'll have `a` calling `b` calling `x` and you only need to have an `a` invocation in your source)
 
-variables can't change their types, the equivalents for builtin types are
+You can also add type annotations. We are trying to respect existing Python3 type annotation conventions and currently pseudo-python recognizes `int`, `float`, `str`, `bool`, `List[<type>]`, 
+`Dict[<key-type>, <value-type>]`, `Tuple[<type>..]`, `Set[<type>]` and `Callable[[<type>..], <type>]`
+
+Beware, you can't just annotate one param, if you provide type annotations for a function/method, pseudo-python expects type hints for all params and a return type
+
+Variables can't change their types, the equivalents for builtin types are
 ```python
 list :  List[@element_type] # generic
 dict:   Dictionary[@key_type @value_type] # generic
@@ -90,7 +92,7 @@ All attributes used in a class should be initialized in its `__init__`
 
 Other pseudo-tips:
 
-* Homogeneous tuples are converted to `pseudo` fixed length arrays and heterogeneous to `pseudo` tuples. in the future `pseudo-python` would analyze better `lists`/`tuple` usage to classify them better in `list`/`array`/`tuple` categories (which can optimize the resulting code in `go`/`c++`/`c#`)
+* Homogeneous tuples are converted to `pseudo` fixed length arrays and heterogeneous to `pseudo` tuples. [Pseudo](https://github.com/alehander42/pseudo) analyzes the tuples usage in the code and sometimes it translates them to classes/structs with meaningful names if the target language is `C#` `C++` or `Go` 
 
 * Attributes that aren't called from other classes are translated as `private`, the other ones as `public`. The rule for methods is different:
 `_name` ones are only translated as `private`. That can be added as
