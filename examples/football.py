@@ -16,10 +16,10 @@ def parse_result(line):
 def calculate_points(results, team): # call(*arg) supported only for tuples
     return sum(result_points(team, *result) for result in results)
 
-def result_points(team, host, away, result):
-    if host == team and result[0] > result[1] or away == team and result[0] < result[1]:
+def result_points(team, host, away, goals):
+    if host == team and goals[0] > goals[1] or away == team and goals[0] < goals[1]:
         return 3
-    elif result[0] == result[1] and (host == team or away == team):
+    elif goals[0] == goals[1] and (host == team or away == team):
         return 1
     else:
         return 0
