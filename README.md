@@ -20,6 +20,10 @@ Pseudo was inspired by the need to generate algorithms/code in different languag
 
 That's why it can be mapped to a well defined subset of a language
 
+It is meant as a framework consuming ast from parser generators / compilers / various tools and generating snippets / codebases in different target languages
+
+![a diagram illustrating the pseudon framework: compilers -> ast -> api translation -> target code](http://i.imgur.com/7ySfy5j.jpg?2)
+
 # Pseudo supports
 
   * basic types and collections and standard library methods for them
