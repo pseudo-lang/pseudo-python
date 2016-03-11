@@ -9,8 +9,19 @@ A restricted Python to idiomatic JavaScript / Ruby / Go / C# translator
 
 ## Supported subset
 
-pseudo-python compiles to `pseudo ast`. Pseudo supports a very clear and somehow limited subset of a language:
-  
+Pseudo-Python compiles to `pseudo ast`. 
+
+[Pseudo](https://github.com/alehander42/pseudo) defines a language-independent AST model and an unified standard library.
+It can map its own standard library to target language libraries and concepts automatically and it tries to generate readable and idiomatic code.
+
+Pseudo-Python translates a subset of Python to Pseudo AST and then it receives the JS/Ruby/C#/Go backends for free. (+ at least 4-5 backends in the future)
+
+Pseudo was inspired by the need to generate algorithms/code in different languages or portint tools/libraries to a new environment
+
+That's why it can be mapped to a well defined subset of a language
+
+# Pseudo supports
+
   * basic types and collections and standard library methods for them
   
   * integer, float, string, boolean
