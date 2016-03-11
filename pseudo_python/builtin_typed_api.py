@@ -178,7 +178,9 @@ TYPED_API = {
     'math': {
         'tan':          ['Number', 'Float'],
         'sin':          ['Number', 'Float'],
-        'cos':          ['Number', 'Float']
+        'cos':          ['Number', 'Float'],
+        'ln':           ['Number', 'Float'],
+        'log':          ['Number', 'Number', 'Float']
     },
 
     'operators': {

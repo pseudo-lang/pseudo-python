@@ -98,8 +98,8 @@ FUNCTION_API = {
         },
 
         'sin':      StandardCall('math', 'sin'),
-        'cos':      StandardCall('math', 'cos')
-
+        'cos':      StandardCall('math', 'cos'),
+        'tan':      StandardCall('math', 'tan')
     },
 
     're': {
@@ -117,7 +117,7 @@ METHOD_API = {
         'upper':      StandardMethodCall('String', 'upper'),
         'lower':      StandardMethodCall('String', 'lower'),
         'title':      StandardMethodCall('String', 'title'),
-        'center':     StandardMethodCall('String', 'justify', default={1: [{'type': 'string', 'value': ' ', 'pseudo_type': 'String'}]}),
+        'center':     StandardMethodCall('String', 'center', default={1: [{'type': 'string', 'value': ' ', 'pseudo_type': 'String'}]}),
         'index':      {
             1:        StandardMethodCall('String', 'find'),
             2:        StandardMethodCall('String', 'find_from')

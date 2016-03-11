@@ -413,13 +413,12 @@ class ASTTranslator:
         arg_nodes = [arg if not isinstance(arg, ast.AST) else self._translate_node(arg) for arg in args]
         func_node = self._translate_node(func, in_call=True)
 
-        # print('CALL CALL ', func_node, arg_nodes[:1])
         if func_node['type'] == 'attr':
             if func_node['object']['pseudo_type'] == 'library': # math.log
                 return self._translate_builtin_call(func_node['object']['name'], func_node['attr'], arg_nodes, location)
             elif self.current_class and self.current_class != 'functions' and isinstance(func.value, ast.Name) and func.value.id == 'self':
                 node_type = 'this_method_call'
-            elif self.current_class and self.current_class != 'functions' and func_node['object']['pseudo_type'] == 'instance_variable':
+            elif self.current_class and self.current_class != 'functions' and func_node['object']['type'] == 'instance_variable':
                 node_type = 'this_method_call'
             elif self._general_type(func_node['object']['pseudo_type']) in PSEUDON_BUILTIN_TYPES: # [2].append
                 return self._translate_builtin_method_call(self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes, location)
@@ -427,7 +426,9 @@ class ASTTranslator:
                 node_type = 'method_call'
 
             return self._translate_real_method_call(node_type, self._general_type(func_node['object']['pseudo_type']), func_node['object'], func_node['attr'], arg_nodes, location)
+        elif func_node['type'] == 'instance_variable':
 
+            return self._translate_real_method_call('this_method_call', self.current_class, {'type': 'this', 'pseudo_type': self.current_class}, func_node['name'], arg_nodes, location)
         else:
             if (func_node['type'] == 'local' or func_node['type'] == 'this') and func_node['pseudo_type'][-1] is None:
                 return self._translate_real_method_call('call', 'functions', None, 'self' if func_node['type'] == 'this' else func_node['name'], arg_nodes, location)
@@ -477,7 +478,7 @@ class ASTTranslator:
 
         return {
             'type': 'new_instance',
-            'class_name': {'type': 'typename', 'name': name},
+            'class_name': name,
             'args': params,
             'pseudo_type': name
         }
@@ -673,14 +674,72 @@ class ASTTranslator:
                 'pseudo_type': binop_type
             }
         else:
-            if left_node['pseudo_type'] == 'String' and op == '%' and right_node['pseudo_type'] == 'String':
-                right_node = {
-                    'type': 'array',
-                    'pseudo_type': ['Array', 'String'],
-                    'elements': [right_node]
-                }
+            if left_node['pseudo_type'] == 'String' and op == '%':
+                if left_node['type'] != 'string':
+                    raise translation_error("pseudo expects a literal, it can't transform string interpolation to other languages if it doesn't have the original template string",
+                        location, self.lines[location[0]])
+                if right_node['pseudo_type'] == 'Array':
+                    count = right_node['pseudo_type'][2]
+                elif right_node['pseudo_type'] == 'Tuple':
+                    count = len(right_node['pseudo_type']) - 1
+                    elements = right_node['elements']
+                else:
+                    count = 1
 
-            return {
+                a = left_node['value'].count('%s') + left_node['value'].count('%d')
+                if a != count:
+                    raise type_check_error('% expected %d formatters, got %d' % (a, count),
+                        location, self.location[lines[0]])
+
+                if count > 1:
+                    if right_node['type'] in ['array', 'tuple']:
+                        elements = right_node['elements']
+                    else:
+                        elements = [{
+                            'type': 'index', 
+                            'sequence': right_node, 
+                            'index': {
+                                'value': j,
+                                'pseudo_type': 'Int',
+                                'type': 'Int'
+                            },
+                            'pseudo_type': right_node['pseudo_type'][j + 1] if right_node['pseudo_type'][0] == 'Tuple' else right_node['pseudo_type'][1]
+                        }
+                        for j
+                        in range(count)]                
+                else:
+                    elements = [right_node]
+
+                y, v = 0, 0
+                words = []
+                # even args of interpolation: strings
+                # odd are placeholders
+                for j in range(a):
+                    while left_node['value'][y:y + 2] not in ['%s', '%d']:
+                        y = left_node['value'].index('%', y)
+                    words.append({'type': 'interpolation_literal', 'value': left_node['value'][v:y], 'pseudo_type': 'String'})
+                    v = y + 2 #ves
+                    if left_node['value'][y:v] == '%d':
+                        if elements[j]['pseudo_type'] != 'Int':
+                            raise type_check_error('%d expects an int',
+                                location, self.lines[location[0]],
+                                wrong_type=elements[j]['pseudo_type'])
+                        words.append({'type': 'interpolation_placeholder', 'value': elements[j], 'index': j, 'pseudo_type': elements[j]['pseudo_type']})
+                    elif left_node['value'][y:y + 2] == '%s':
+                        if elements[j]['pseudo_type'] != 'String':
+                            raise type_check_error('%s expects an int',
+                                location, self.lines[location[0]],
+                                wrong_type=elements[j]['pseudo_type'])
+                        words.append({'type': 'interpolation_placeholder', 'value': elements[j], 'pseudo_type': elements[j]['pseudo_type'], 'index': j})                
+                words.append({'type': 'interpolation_literal', 'value': left_node['value'][v:], 'pseudo_type': 'String'})
+
+                return {
+                    'type': 'interpolation',
+                    'args': words,
+                    'pseudo_type': 'String'
+                }
+            else:
+                return {
                 'type': 'standard_method_call',
                 'receiver': left_node,
                 'message': OPERATOR_API[self._general_type(left_node['pseudo_type'])][op],
@@ -1021,7 +1080,7 @@ class ASTTranslator:
                 return z
 
     def _translate_augassign(self, target, op, value, location):
-        return self._translate_assign([target], ast.BinOp(target, op, value))
+        return self._translate_assign([target], ast.BinOp(target, op, value), location)
 
     def _translate_if(self, test, orelse, body, location, base=True):
         test_node = self._testable(self._translate_node(test))
