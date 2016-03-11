@@ -22,7 +22,12 @@ def builtin_type_check(namespace, function, receiver, args):
     fs = TYPED_API[namespace]
     if fs == 'library':
         fs = TYPED_API['_%s' % namespace]
+    # print(namespace, function, receiver, args, TYPED_API[namespace])
+    # input(0)
+    if function not in fs:
+        raise  PseudoPythonTypeCheckError('wrong usage of %s' % str(function))
     x = fs[function]
+    
     a = namespace + '#' + function if receiver else namespace + ':' + function
     if namespace == 'List' or namespace == 'Set' or namespace == 'Array':
         generics = {'@t': receiver['pseudo_type'][1]}
@@ -205,7 +210,8 @@ TYPED_API = {
         'repeat':     ['Int', ['List', '@t']],
         'push_many':  [['List', '@t'], 'Void'],
         'remove':     ['@t', 'Void'],
-        'length':     ['Int']
+        'length':     ['Int'],
+        'join':       [['List', 'String'], 'String']
     },
 
     'Dictionary': {
@@ -216,7 +222,6 @@ TYPED_API = {
     'String': {
         'find':       ['String', 'Int'],
         'to_int':     ['Int'],
-        'join':       [['List', 'String'], 'String'],
         'split':      ['String', ['List', 'String']],
         'c_format':   [['Array', 'String'], 'String'],
         'upper':      ['String'],

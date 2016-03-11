@@ -649,7 +649,9 @@ class ASTTranslator:
     def _translate_return(self, value, location):
         value_node = self._translate_node(value)
         whiplash = self.type_env.top[self.current_class][self.function_name]
-        if whiplash[-1] and whiplash[-1] != value_node['pseudo_type']:
+        if value_node is None:
+            raise type_check_error("expected a non-void return type for %s" % self.function_name, location, self.lines[location[0]], wrong_type='Void')
+        elif whiplash[-1] and whiplash[-1] != value_node['pseudo_type']:
             raise type_check_error(
                 "expected %s return type for %s" % (serialize_type(whiplash[-1]), self.function_name), location, self.lines[location[0]], wrong_type=value_node['pseudo_type'])
         elif whiplash[-1] is None:

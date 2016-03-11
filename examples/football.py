@@ -28,5 +28,4 @@ if len(sys.argv) < 3:
     print('usage: football <stats-file> <team>')
 else:
     results = load_results(sys.argv[1])
-    # print(result_points(sys.argv[2], *results[0]))
     print(calculate_points(results, sys.argv[2]))

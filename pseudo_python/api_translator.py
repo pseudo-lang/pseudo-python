@@ -1,4 +1,5 @@
 from pseudo_python.builtin_typed_api import builtin_type_check
+from pseudo_python.errors import PseudoPythonTypeCheckError
 
 class Standard:
     '''
@@ -61,6 +62,8 @@ class StandardSwapper(Standard):
         self.message = message
 
     def expand(self, args):
+        if len(args) < 2:
+            raise PseudoPythonTypeCheckError('%s expects more args' % self.message)
         q = builtin_type_check(self.type, self.message, args[1], [args[0]])[-1]
         return {'type': 'standard_method_call', 'receiver': args[1], 'args': [args[0]], 'message': self.message, 'pseudo_type': q}
 
