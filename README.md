@@ -7,7 +7,7 @@ A restricted Python to idiomatic JavaScript / Ruby / Go / C# translator
 
 [Pseudo](https://github.com/alehander42/pseudo) is a framework for high level code generation: it is used by this compiler to translate a subset of Python to all Pseudo-supported languages
 
-**If you are using Python3.5 and you experience problems with an already installed version of pseudo-python, please upgrade it to `0.2.16` (`pip3 install pseudo-python --upgrade`)**
+**If you are using Python3.5 and you experience problems with an already installed version of pseudo-python, please upgrade it to `0.2.18` (`pip3 install pseudo-python --upgrade`)**
 
 
 

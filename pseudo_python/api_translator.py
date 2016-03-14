@@ -134,7 +134,9 @@ METHOD_API = {
             2:      StandardMethodCall('List', 'insert_at')
         },
         'remove':   StandardMethodCall('List', 'remove'),
-        'extend':   StandardMethodCall('List', 'push_many')
+        'extend':   StandardMethodCall('List', 'push_many'),
+        'map':      StandardMethodCall('List', 'map'),
+        'filter':   StandardMethodCall('List', 'filter')
     },
 
     'Dictionary': {

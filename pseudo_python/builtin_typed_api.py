@@ -160,7 +160,6 @@ TYPED_API = {
     # methods
     'global': {
         'exit':  ['Int', 'Void'],
-        'wat':   ['Int'],
         'to_string': ['Any', 'String']
     },
 
@@ -211,7 +210,9 @@ TYPED_API = {
         'push_many':  [['List', '@t'], 'Void'],
         'remove':     ['@t', 'Void'],
         'length':     ['Int'],
-        'join':       [['List', 'String'], 'String']
+        'join':       [['List', 'String'], 'String'],
+        'map':        [['Function', '@t', '@y'], ['List', '@y']],
+        'filter':     [['Function', '@t', 'Boolean'], ['List', '@t']]
     },
 
     'Dictionary': {
@@ -293,7 +294,8 @@ ORIGINAL_METHODS = {
         'push_many':  'extend(other)',
         'remove':     'remove',
         'length':     'len',
-        'map':        'list comprehension / map'
+        'map':        'list comprehension / map',
+        'filter':     'list comprehension / filter'
     },
 
     'Dictionary': {

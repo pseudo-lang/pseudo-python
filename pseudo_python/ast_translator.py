@@ -34,6 +34,8 @@ PSEUDO_KEY_TYPES = {'String', 'Int', 'Float', 'Bool'}
 
 BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int', 'len', 'any', 'all', 'sum'}
 
+FORBIDDEN_TOP_LEVEL_FUNCTIONS = {'map', 'filter'}
+
 ITERABLE_TYPES = {'String', 'List', 'Dictionary', 'Set', 'Array'}
 
 TESTABLE_TYPE = 'Boolean'
@@ -353,7 +355,62 @@ class ASTTranslator:
                 args.append(arg)
 
 
-        if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
+
+        if isinstance(func, ast.Name) and func.id in FORBIDDEN_TOP_LEVEL_FUNCTIONS:
+            raise translation_error('%s  supported only as list(%s)' % (func.id, func.id),
+                location, self.lines[location[0]])
+        elif isinstance(func, ast.Name) and func.id == 'list':
+            if len(args) != 1 or not isinstance(args[0], ast.Call) or not isinstance(args[0].func, ast.Name) or args[0].func.id not in FORBIDDEN_TOP_LEVEL_FUNCTIONS:
+                raise translation_error('list currently not supported',
+                    location, self.lines[location[0]],
+                    suggestions='list is currently only supported for list(filter)')
+            if len(args[0].args) != 2:
+                raise type_check_error('%s expects 2 arg, received %d args' % (args[0].func.id, len(args[0].args)),
+                    location, self.lines[location[0]])
+            receiver_node = self._translate_node(args[0].args[1])
+            if self._general_type(receiver_node['pseudo_type']) != 'List':
+                raise type_check_error('#%s currently works only' % args[0].func.id,
+                    location, self.lines[location[0]],
+                    wrong_type=receiver_node['pseudo_type'])
+
+
+            if isinstance(args[0].args[0], ast.Lambda):
+                if len(args[0].args[0].args.args) != 1:
+                    raise translation_error('lambda expected 1 arg, received %d' % len(args[0].args[0].args.args),
+                        location, self.lines[location[0]])
+
+                arg_nodes = [self._translate_functional_lambda(args[0].args[0], receiver_node['pseudo_type'][1])]
+            else:
+                arg_nodes = [self._translate_node(args[0].args.args[0], in_call=True)]
+
+            if args[0].func.id == 'map':
+                return_type = ['List', arg_nodes[0]['pseudo_type'][-1]]
+            else:
+                if arg_nodes[0]['pseudo_type'][-1] != 'Boolean':
+                    l = {'type': 'local', 'name': args[0].args[0].args.args[0].arg, 'pseudo_type': arg_nodes['pseudo_type'][-1]}
+                    arg_nodes[0] = {
+                        'type': 'anonymous_function',
+                        'pseudo_type': ['Function', arg_nodes['pseudo_type'][-1], 'Boolean'],
+                        'return_type': 'Boolean',
+                        'params': [l],
+                        'block': [self._testable({
+                            'type': 'call',
+                            'function': arg_nodes[0],
+                            'args': [l],
+                            'pseudo_type': arg_nodes[0]['pseudo_type'][-1]
+                        })]
+                    }
+        
+                return_type = ['List', 'Boolean']
+            return {
+                'type': 'standard_method_call',
+                'receiver': receiver_node,
+                'message': args[0].func.id,
+                'args': arg_nodes,
+                'pseudo_type': return_type
+            }
+
+        elif isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
             if func.id in ['any', 'all', 'sum']:
                 if len(args) != 1:
                     raise translation_error('%s expected 1 arg, not %d' % (func.id, len(args)),
@@ -527,13 +584,8 @@ class ASTTranslator:
                 'pseudo-python doesn\'t support %s %s' % (namespace, function),
                 location, self.lines[location[0]],
                 suggestions='pseudo-python supports those %s functions\n  %s' % (
-                    namespace, '\n'.join(
-                        '  %s %s -> %s' % (
-                            name,
-                            ' '.join(serialize_type(arg) for arg in t[:-1]),
-                            serialize_type(t[-1]))
-                        for name, t in TYPED_API['_%s' % namespace].items()).strip()))
-
+                    namespace,
+                    prepare_table(TYPED_API[namespace], ORIGINAL_METHODS.get(namespace)).strip()))
 
 
         if not isinstance(api, dict):
@@ -1405,6 +1457,30 @@ class ASTTranslator:
         elif value is None:
             return {'type': 'null', 'pseudo_type': 'Void'}
 
+    def _translate_functional_lambda(self, l, arg_type):
+
+        params = [{'type': 'local', 'name': l.args.args[0].arg, 'pseudo_type': arg_type}]
+        self.type_env = self.type_env.child_env({l.args.args[0].arg: arg_type})
+        old_f, self.function_name = self.function_name, 'lambda'
+        node = self._translate_node(l.body)
+        nodes = [{
+            'type': 'implicit_return',
+            'pseudo_type': node['pseudo_type'],
+            'value': node
+        }]
+        self.function_name = old_f
+        self.type_env = self.type_env.parent
+        return {
+            'type': 'anonymous_function',
+            'params': params,
+            'block': nodes,
+            'pseudo_type': ['Function', arg_type, node['pseudo_type']],
+            'return_type': node['pseudo_type']
+        }
+
+    def _translate_lambda(self, body, args, location):
+        raise
+
     def _translate_listcomp(self, generators, elt, location):
         if isinstance(generators[0].target, ast.Name):
             sketchup, env = self._translate_iter(generators[0].target, generators[0].iter)
@@ -1427,7 +1503,7 @@ class ASTTranslator:
                     'args': [{
                         'type': 'anonymous_function',
                         'params': [sketchup['iterators']['iterator']],
-                        'pseudo_type': ['Function', sketchup['iterators']['iterator']['pseudo_type'], 
+                        'pseudo_type': ['Function', sketchup['iterators']['iterator']['pseudo_type'],
                                         elt['pseudo_type']],
                         'return_type': elt['pseudo_type'],
                         'block': [{
