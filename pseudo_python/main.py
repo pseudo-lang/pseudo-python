@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import os
 import sys
 import pseudo_python
 import pseudo_python.errors
@@ -38,7 +38,7 @@ def main():
     filename = sys.argv[1]
     with open(filename, 'r') as f:
         source = f.read()
-    base = filename.partition('.')[0]
+    base, _ = os.path.splitext(filename)
     try:
         if len(sys.argv) == 2:
             yaml.Dumper.ignore_aliases = lambda *args : True
@@ -49,7 +49,8 @@ def main():
         else:
             arg = sys.argv[2]
             if '.' in arg:
-                base, _, language = arg.rpartition('.')
+                base, language = os.path.splitext(arg)
+                language = language[1:]
             else:
                 language = arg
             if language not in pseudo.SUPPORTED_FORMATS:
