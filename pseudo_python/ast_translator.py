@@ -323,25 +323,34 @@ class ASTTranslator:
                     z = {'type': 'local', 'name': '_old_%s' % id, 'pseudo_type': id_type}
                 return z
 
-    def _translate_call(self, func, args, keywords, starargs, kwargs, location):
+    def _translate_call(self, func, args, keywords, starargs=None, kwargs=None, location=None):
         self.assert_translatable('call', keywords=([], keywords), kwargs=(None, kwargs))
-        if starargs:
-            many_arg = self._translate_node(starargs)
-            if isinstance(many_arg['pseudo_type'], list) and many_arg['pseudo_type'][0] == 'Tuple':
-                args += [{
-                    'type': 'index',
-                    'sequence': many_arg,
-                    'index': {'type': 'int', 'value': j, 'pseudo_type': 'Int'},
-                    'pseudo_type': t
-                }
-                for j, t
-                in enumerate(many_arg['pseudo_type'][1:])]    
+        #Python3.5
+        # apparently you can't do e(*a, *a) in Python3.4 wtf
+        initial_args = args[:]
+        args = []
+        if starargs: # python3.4
+            initial_args.append(ast.Started(ast.starargs))
 
+        for arg in initial_args:
+            if isinstance(arg, ast.Starred):    
+                many_arg = self._translate_node(arg)
+                if isinstance(many_arg['pseudo_type'], list) and many_arg['pseudo_type'][0] == 'Tuple':
+                    args += [{
+                        'type': 'index',
+                        'sequence': many_arg,
+                        'index': {'type': 'int', 'value': j, 'pseudo_type': 'Int'},
+                        'pseudo_type': t
+                    }
+                    for j, t
+                    in enumerate(many_arg['pseudo_type'][1:])]    
+
+                else:
+                    raise translation_error("pseudo-python supports <call>(..*args) only for Tuple *args, because otherwise it doesn't know the exact arg count at compile time",
+                            location, self.lines[location[0]],
+                            wrong_type=many_arg['pseudo_type'])
             else:
-                raise translation_error("pseudo-python supports <call>(..*args) only for Tuple *args, because otherwise it doesn't know the exact arg count at compile time",
-                        location, self.lines[location[0]],
-                        wrong_type=many_arg['pseudo_type'])
-
+                args.append(arg)
 
 
         if isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
