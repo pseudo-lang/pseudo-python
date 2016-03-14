@@ -330,11 +330,11 @@ class ASTTranslator:
         initial_args = args[:]
         args = []
         if starargs: # python3.4
-            initial_args.append(ast.Started(ast.starargs))
+            initial_args.append(ast.Starred(starargs, None))
 
         for arg in initial_args:
-            if isinstance(arg, ast.Starred):    
-                many_arg = self._translate_node(arg)
+            if isinstance(arg, ast.Starred):
+                many_arg = self._translate_node(arg.value)
                 if isinstance(many_arg['pseudo_type'], list) and many_arg['pseudo_type'][0] == 'Tuple':
                     args += [{
                         'type': 'index',
@@ -343,7 +343,7 @@ class ASTTranslator:
                         'pseudo_type': t
                     }
                     for j, t
-                    in enumerate(many_arg['pseudo_type'][1:])]    
+                    in enumerate(many_arg['pseudo_type'][1:])]
 
                 else:
                     raise translation_error("pseudo-python supports <call>(..*args) only for Tuple *args, because otherwise it doesn't know the exact arg count at compile time",
@@ -707,8 +707,8 @@ class ASTTranslator:
                         elements = right_node['elements']
                     else:
                         elements = [{
-                            'type': 'index', 
-                            'sequence': right_node, 
+                            'type': 'index',
+                            'sequence': right_node,
                             'index': {
                                 'value': j,
                                 'pseudo_type': 'Int',
@@ -717,7 +717,7 @@ class ASTTranslator:
                             'pseudo_type': right_node['pseudo_type'][j + 1] if right_node['pseudo_type'][0] == 'Tuple' else right_node['pseudo_type'][1]
                         }
                         for j
-                        in range(count)]                
+                        in range(count)]
                 else:
                     elements = [right_node]
 
@@ -741,7 +741,7 @@ class ASTTranslator:
                             raise type_check_error('%s expects an int',
                                 location, self.lines[location[0]],
                                 wrong_type=elements[j]['pseudo_type'])
-                        words.append({'type': 'interpolation_placeholder', 'value': elements[j], 'pseudo_type': elements[j]['pseudo_type'], 'index': j})                
+                        words.append({'type': 'interpolation_placeholder', 'value': elements[j], 'pseudo_type': elements[j]['pseudo_type'], 'index': j})
                 words.append({'type': 'interpolation_literal', 'value': left_node['value'][v:], 'pseudo_type': 'String'})
 
                 return {
@@ -1303,7 +1303,7 @@ class ASTTranslator:
                     'function': 'index',
                     'args': [z],
                     'pseudo_type': 'String'
-                }                
+                }
             result = {
                 'type': 'index',
                 'sequence': value_node,
