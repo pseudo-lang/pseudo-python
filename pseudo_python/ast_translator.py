@@ -1419,6 +1419,7 @@ class ASTTranslator:
         if not generators[0].ifs:
             if 'index' not in sketchup and self._general_type(sketchup['sequences']['type']) == 'for_sequence':
                 elt = self._translate_node(elt)
+                self.function_name = old_function_name
                 return {
                     'type': 'standard_method_call',
                     'receiver': sketchup['sequences']['sequence'],

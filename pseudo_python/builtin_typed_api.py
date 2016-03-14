@@ -292,7 +292,8 @@ ORIGINAL_METHODS = {
         'repeat':     '*',
         'push_many':  'extend(other)',
         'remove':     'remove',
-        'length':     'len'
+        'length':     'len',
+        'map':        'list comprehension / map'
     },
 
     'Dictionary': {
