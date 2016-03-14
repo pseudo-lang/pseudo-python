@@ -1415,8 +1415,31 @@ class ASTTranslator:
 
         sketchup['type'] = 'standard_iterable_call' + sketchup['type']
 
+
         if not generators[0].ifs:
-            sketchup['function'] = 'map'
+            if 'index' not in sketchup and self._general_type(sketchup['sequences']['type']) == 'for_sequence':
+                elt = self._translate_node(elt)
+                return {
+                    'type': 'standard_method_call',
+                    'receiver': sketchup['sequences']['sequence'],
+                    'message': 'map',
+                    'args': [{
+                        'type': 'anonymous_function',
+                        'params': [sketchup['iterators']['iterator']],
+                        'pseudo_type': ['Function', sketchup['iterators']['iterator']['pseudo_type'], 
+                                        elt['pseudo_type']],
+                        'return_type': elt['pseudo_type'],
+                        'block': [{
+                            'type': 'implicit_return',
+                            'value': elt,
+                            'pseudo_type': elt['pseudo_type']
+                        }]
+                    }],
+                    'pseudo_type': ['List', elt['pseudo_type']]
+                }
+
+            else:
+                sketchup['function'] = 'map'
         else:
             test_node = self._testable(self._translate_node(generators[0].ifs[0]))
             sketchup['function'] = 'filter_map'
