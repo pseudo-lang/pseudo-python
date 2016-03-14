@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pseudo-python',
-    version='0.2.10',
+    version='0.2.12',
     description='a python3 to pseudo compiler',
     author='Alexander Ivanov',
     author_email='alehander42@gmail.com',

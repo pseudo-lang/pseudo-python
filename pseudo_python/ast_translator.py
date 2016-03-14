@@ -1401,7 +1401,7 @@ class ASTTranslator:
 
     def _translate_nameconstant(self, value, location):
         if value == True or value == False:
-            return {'type': 'boolean', 'value': value, 'pseudo_type': 'Boolean'}
+            return {'type': 'boolean', 'value': str(value).lower(), 'pseudo_type': 'Boolean'}
         elif value is None:
             return {'type': 'null', 'pseudo_type': 'Void'}
 

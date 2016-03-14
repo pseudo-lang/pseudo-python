@@ -7,7 +7,8 @@ A restricted Python to idiomatic JavaScript / Ruby / Go / C# translator
 
 [Pseudo](https://github.com/alehander42/pseudo) is a framework for high level code generation: it is used by this compiler to translate a subset of Python to all Pseudo-supported languages
 
-**If you are using Python3.5 and you experience problems with an already installed version of pseudo-python, please upgrade it to `0.2.10` (`pip3 install pseudo-python --upgrade`)**
+**If you are using Python3.5 and you experience problems with an already installed version of pseudo-python, please upgrade it to `0.2.12s` (`pip3 install pseudo-python --upgrade`)**
+
 
 
 ## Supported subset
@@ -24,6 +25,8 @@ Pseudo was inspired by the need to generate algorithms/code in different languag
 That's why it can be mapped to a well defined subset of a language
 
 It is meant as a framework consuming ast from parser generators / compilers / various tools and generating snippets / codebases in different target languages
+
+# Plan
 
 ![a diagram illustrating the pseudon framework: compilers -> ast -> api translation -> target code](http://i.imgur.com/7ySfy5j.jpg?2)
 
