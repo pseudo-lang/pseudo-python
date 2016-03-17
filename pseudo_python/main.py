@@ -3,7 +3,6 @@ import os
 import sys
 import pseudo_python
 import pseudo_python.errors
-import yaml
 import pseudo
 import pseudo.errors
 from colorama import init
@@ -41,8 +40,7 @@ def main():
     base, _ = os.path.splitext(filename)
     try:
         if len(sys.argv) == 2:
-            yaml.Dumper.ignore_aliases = lambda *args : True
-            clj = yaml.dump(pseudo_python.translate(source))
+            clj = pseudo_python.translate_to_yaml(source)
             with open('%s.pseudo.yaml' % base, 'w') as f:
                 f.write(clj)
             print(colored('OK\nsaved pseudo ast as %s.pseudo.yaml' % base, 'green'))
@@ -72,8 +70,10 @@ def main():
             print(colored('\nright:\n%s' % e.right, 'green'))
         if e.wrong:
             print(colored('\nwrong:\n%s' % e.wrong, 'red'))
+        exit(1)
     except pseudo.errors.PseudoError as e:
         print(colored('Pseudo error:\n%s' % e, 'red'))
+        exit(1)
 
 if __name__ == '__main__':
     main()
