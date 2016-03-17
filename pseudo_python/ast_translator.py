@@ -32,7 +32,7 @@ KEY_TYPES = {'str', 'int', 'float', 'bool'}
 
 PSEUDO_KEY_TYPES = {'String', 'Int', 'Float', 'Bool'}
 
-BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'int', 'len', 'any', 'all', 'sum'}
+BUILTIN_FUNCTIONS = {'print', 'input', 'str', 'set', 'int', 'len', 'any', 'all', 'sum'}
 
 FORBIDDEN_TOP_LEVEL_FUNCTIONS = {'map', 'filter'}
 
@@ -411,7 +411,18 @@ class ASTTranslator:
             }
 
         elif isinstance(func, ast.Name) and func.id in BUILTIN_FUNCTIONS:
-            if func.id in ['any', 'all', 'sum']:
+            if func.id == 'set':
+                if args:
+                    raise translation_error('only set() supported', 
+                        location, self.lines[location[0]],
+                        suggestions='please use {} notation if a set has elements')
+                return {
+                    'type': 'set',
+                    'pseudo_type': ['Set', None],
+                    'elements': []
+                }
+
+            elif func.id in ['any', 'all', 'sum']:
                 if len(args) != 1:
                     raise translation_error('%s expected 1 arg, not %d' % (func.id, len(args)),
                             location, self.lines[location[0]])
@@ -471,7 +482,6 @@ class ASTTranslator:
                             }],
                             'pseudo_type': _type
                         }
-
             else:
                 arg_nodes = self._translate_node(args)
                 return self._translate_builtin_call('global', func.id, arg_nodes, location)
@@ -1215,6 +1225,12 @@ class ASTTranslator:
                     'receiver': test_node,
                     'message': 'has_match',
                     'args': []
+                }
+            elif t == 'Void':
+                return {
+                    'type': 'not_null_check',
+                    'value': test_node,
+                    'pseudo_type': 'Boolean'
                 }
             else:
                 raise PseudoPythonTypeCheckError('pseudo-python expects a bool or RegexpMatch test not %s' % serialize_type(test_node['pseudo_type']))
