@@ -102,7 +102,9 @@ FUNCTION_API = {
 
         'sin':      StandardCall('math', 'sin'),
         'cos':      StandardCall('math', 'cos'),
-        'tan':      StandardCall('math', 'tan')
+        'tan':      StandardCall('math', 'tan'),
+        'pow':      lambda left, right, pseudo_type: Node('binary_op',
+                        op='**', left=left, right=right, pseudo_type=pseudo_type)
     },
 
     're': {

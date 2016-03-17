@@ -729,13 +729,22 @@ class ASTTranslator:
         left_node, right_node = self._translate_node(left), self._translate_node(right)
         binop_type = TYPED_API['operators'][op](left_node['pseudo_type'], right_node['pseudo_type'])[-1]
         if binop_type == 'Float' or binop_type == 'Int':
-            return {
-                'type': 'binary_op',
-                'op': op,
-                'left': left_node,
-                'right': right_node,
-                'pseudo_type': binop_type
-            }
+            if op == '**': # math:pow(left, right)
+                return {
+                    'type': 'standard_call',
+                    'namespace': 'math',
+                    'args': [left_node, right_node],
+                    'pseudo_type': binop_type,
+                    'function': 'pow'
+                }
+            else:
+                return {
+                    'type': 'binary_op',
+                    'op': op,
+                    'left': left_node,
+                    'right': right_node,
+                    'pseudo_type': binop_type
+                }
         else:
             if left_node['pseudo_type'] == 'String' and op == '%':
                 if left_node['type'] != 'string':
@@ -814,20 +823,20 @@ class ASTTranslator:
         value = operand
         if isinstance(op, ast.USub):
             value_node = self._translate_node(value)
-            if value_node.pseudo_type != 'Int' and value_node.pseudo_type != 'Float':
+            if value_node['pseudo_type'] != 'Int' and value_node['pseudo_type'] != 'Float':
                 raise type_check_error('- expects Int or Float',
                     location, self.lines[location[0]],
-                    wrong_type=value_node.pseudo_type)
+                    wrong_type=value_node['pseudo_type'])
             return {
                 'type': 'unary_op',
                 'op': '-',
                 'value': value_node,
-                'pseudo_type': value_node.pseudo_type
+                'pseudo_type': value_node['pseudo_type']
             }
         elif isinstance(op, ast.Not):
             value_node = self._testable(self._translate_node(value))
-            if value_node.type == 'standard_method_call' and value_node.message == 'present?':
-                value_node.message = 'empty?'
+            if value_node['type'] == 'standard_method_call' and value_node['message'] == 'present?':
+                value_node['message'] = 'empty?'
                 return value_node
             else:
                 return {
