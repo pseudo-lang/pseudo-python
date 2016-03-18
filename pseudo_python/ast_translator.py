@@ -843,7 +843,7 @@ class ASTTranslator:
                     'value': -value_node['value'],
                     'pseudo_type': 'Int'
                 }
-            else;
+            else:
                 return {
                     'type': 'unary_op',
                     'op': '-',
