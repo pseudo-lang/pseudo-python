@@ -910,7 +910,7 @@ class ASTTranslator:
         right_node = self._translate_node(comparators[0])
         left_node = self._translate_node(left)
 
-        self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'], location)
+        self._confirm_comparable(op, left_node['pseudo_type'], right_node['pseudo_type'], location)
 
         result = {
             'type': 'comparison',
@@ -924,7 +924,7 @@ class ASTTranslator:
         else:
             for r in comparators[1:]:
                 left_node, right_node = right_node, self._translate_node(r)
-                self._confirm_comparable(left_node['pseudo_type'], right_node['pseudo_type'], location)
+                self._confirm_comparable(op, left_node['pseudo_type'], right_node['pseudo_type'], location)
                 result = {
                     'type': 'binary_op',
                     'op': 'and',
@@ -947,9 +947,9 @@ class ASTTranslator:
                 location, self.lines[location[0]],
                 wrong_type=index_type)
 
-    def _confirm_comparable(self, l, r, location):
-        if isinstance(l, list) or isinstance(r, list) or\
-           l != r or l not in COMPARABLE_TYPES:
+    def _confirm_comparable(self, o, l, r, location):
+        if o == '==' and l != r or o != '==' and (isinstance(l, list) or isinstance(r, list) or\
+           l != r or l not in COMPARABLE_TYPES):
             raise type_check_error(
                 '%s not comparable with %s' % (serialize_type(l), serialize_type(r)),
                 location, self.lines[location[0]],

@@ -1,8 +1,16 @@
+0.2.26
+
+18.03.2016
+
+Features:
+
+	* Type checking for ==
+
 0.2.22  
     
-    17.03.2016
+17.03.2016
 
-    Fixes:
+Fixes:
 
-        * Fix unary op handling
-        * Convert ** to `math:pow`
+  * Fix unary op handling
+  * Convert ** to `math:pow`
