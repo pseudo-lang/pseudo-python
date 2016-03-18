@@ -837,12 +837,19 @@ class ASTTranslator:
                 raise type_check_error('- expects Int or Float',
                     location, self.lines[location[0]],
                     wrong_type=value_node['pseudo_type'])
-            return {
-                'type': 'unary_op',
-                'op': '-',
-                'value': value_node,
-                'pseudo_type': value_node['pseudo_type']
-            }
+            if value_node['type'] == 'int':
+                return {
+                    'type': 'int',
+                    'value': -value_node['value'],
+                    'pseudo_type': 'Int'
+                }
+            else;
+                return {
+                    'type': 'unary_op',
+                    'op': '-',
+                    'value': value_node,
+                    'pseudo_type': value_node['pseudo_type']
+                }
         elif isinstance(op, ast.Not):
             value_node = self._testable(self._translate_node(value))
             if value_node['type'] == 'standard_method_call' and value_node['message'] == 'present?':

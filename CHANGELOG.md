@@ -5,6 +5,7 @@
 Features:
 
 	* Type checking for ==
+	* Fix negative numbers
 
 0.2.22  
     
