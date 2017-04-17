@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.org/alehander42/pseudo-python.svg?branch=master)](https://travis-ci.org/alehander42/pseudo-python)
 [![MIT License](http://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-#pseudo-python
+# pseudo-python
 
 A restricted Python to idiomatic JavaScript / Ruby / Go / C# translator
 
