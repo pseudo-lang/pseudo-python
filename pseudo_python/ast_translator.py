@@ -1636,10 +1636,11 @@ class ASTTranslator:
                     raise PseudoPythonTypeCheckError('enumerate expected one arg not %d and two indices' % len(k.args))
                 return self._translate_enumerate(target.elts, k.args[0])
             elif k.func.id == 'range':
-                if not isinstance(target, ast.Tuple) or len(target.elts) != 2:
+                if isinstance(target, ast.Name):
+                    return self._translate_range([target], k.args)
+                elif not isinstance(target, (ast.Name, ast.Tuple)) or isinstance(target, ast.Tuple) and len(target.elts) != 2:
                     raise PseudoPythonTypeCheckError('range expected two indices')
-
-                if not k.args or len(k.args) > 3:
+                elif not k.args or len(k.args) > 3:
                     raise PseudoPythonTypeCheckError('range expected 1 to 3 args not %d' % len(k.args))
                 return self._translate_range(target.elts, k.args)
             elif k.func.id == 'zip':
