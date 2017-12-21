@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import sys
+#sys.path.append("/home/alehander42/pseudo")
+#sys.path.append("/home/alehander42/pseudo-python")
 import pseudo_python
 import pseudo_python.errors
 import pseudo

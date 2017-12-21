@@ -895,7 +895,7 @@ class ASTTranslator:
         return {
             'type': 'standard_method_call',
             'receiver': sequence_node,
-            'message': 'include?',
+            'message': 'contains?',
             'args': [element_node],
             'pseudo_type': 'Boolean'
         }
