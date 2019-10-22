@@ -1,4 +1,4 @@
-PyYAML==3.11
+PyYAML==5.1
 colorama
 termcolor
 pseudo>=0.2.3
