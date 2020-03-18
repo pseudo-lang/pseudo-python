@@ -10,6 +10,10 @@ A restricted Python to idiomatic JavaScript / Ruby / Go / C# translator
 **If you are using Python3.5 and you experience problems with an already installed version of pseudo-python, please upgrade it to `0.2.34` (`pip3 install pseudo-python --upgrade`)**
 
 
+# git history
+
+Sorry: I lied, manipulating the git history in a way that it appears most of the work is after 1 march: I was finishing my work in a company in february and I wanted to hide the fact i've worked on pseudo in that time: I actually started more active work somewhere around 20-th february if I remember correctly, somewhere around the second half of february. I am not sure if i have that original git history anymore: sorry to Clevertech(the company)/any observers, this was a really ugly thing to do.
+
 
 ## Supported subset
 
